@@ -1,0 +1,2206 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Maze Run</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#00f5a8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Maze Run">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Creepster&family=Chakra+Petch:wght@400;500;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0c0f1f;
+    --accent: #00f5a8;
+    --accent2: #ff5fd8;
+    --accent3: #ffb627;
+    --exit-col: #22c55e;
+    --text: #eef2ff;
+    --muted: #8a93c4;
+    --surface: #1a1f3a;
+    --border: #3a3f6e;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background:
+      radial-gradient(ellipse at 15% 10%, rgba(255,95,216,0.18) 0%, transparent 45%),
+      radial-gradient(ellipse at 85% 90%, rgba(0,245,168,0.16) 0%, transparent 45%),
+      radial-gradient(ellipse at 85% 10%, rgba(255,182,39,0.12) 0%, transparent 40%),
+      linear-gradient(160deg, #0c0f1f 0%, #161334 50%, #0c0f1f 100%);
+    color: var(--text);
+    font-family: 'Chakra Petch', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: fixed;
+    inset: 0;
+    overscroll-behavior: none;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  #game-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    max-width: 900px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* HUD TOP — superposé en haut du viewport pendant le jeu */
+  #hud {
+    display: none;
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    z-index: 5;
+    justify-content: space-between;
+    align-items: center;
+    padding: calc(7px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 7px calc(12px + env(safe-area-inset-left));
+    background: linear-gradient(to bottom, rgba(12,15,31,0.82) 0%, rgba(12,15,31,0.0) 100%);
+    pointer-events: none;
+  }
+
+  #hud .title {
+    font-family: 'Creepster', cursive;
+    font-size: 1rem;
+    letter-spacing: 0.06em;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 10px rgba(0,245,168,0.5));
+  }
+
+  #hud .stats {
+    display: flex;
+    gap: 14px;
+    font-size: 0.62rem;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+  }
+
+  #hud .stats span { color: var(--accent3); font-weight: 600; }
+
+  #pauseBtn {
+    pointer-events: auto;
+    background: rgba(20,16,40,0.8);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    font-size: 0.8rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #pauseBtn:active { background: var(--accent); color: #0c0f1f; }
+
+  /* PAUSE OVERLAY */
+  #pauseOverlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 9;
+    background: rgba(8,10,18,0.88);
+    backdrop-filter: blur(6px);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+  }
+  #pauseOverlay h2 {
+    font-family: 'Creepster', cursive;
+    font-size: 2rem;
+    background: linear-gradient(90deg, var(--accent), var(--accent3));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* VIEWPORT — occupe tout l'espace disponible une fois la partie lancée */
+  #viewport {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    background: #0c0f1f;
+    display: none;
+  }
+  #viewport.active {
+    display: block;
+  }
+
+  canvas#view {
+    display: block;
+    position: absolute;
+    top: 0; left: 0;
+    width: 100% !important;
+    height: 100% !important;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  /* MINIMAP */
+  #minimap-wrap {
+    position: absolute;
+    top: calc(48px + env(safe-area-inset-top));
+    right: calc(10px + env(safe-area-inset-right));
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+
+  #minimap-toggle {
+    background: rgba(20,16,40,0.8);
+    border: 1px solid var(--accent2);
+    border-radius: 4px;
+    color: var(--accent2);
+    font-family: 'Chakra Petch', sans-serif;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 2px 6px;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s, border-color 0.15s, box-shadow 0.15s;
+    line-height: 1.6;
+    touch-action: manipulation;
+  }
+  #minimap-toggle:hover { color: var(--accent); border-color: var(--accent); box-shadow: 0 0 10px rgba(0,245,168,0.4); }
+
+  #minimap {
+    opacity: 0.85;
+    border: 1px solid var(--accent2);
+    border-radius: 4px;
+    background: rgba(8,12,20,0.85);
+    box-shadow: 0 0 16px rgba(255,95,216,0.25);
+    transition: opacity 0.2s;
+  }
+  #minimap.hidden { opacity: 0; pointer-events: none; }
+
+  /* COMPASS — pointe vers la sortie, indication légère sans donner le chemin */
+  #compass {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: rgba(20,16,40,0.8);
+    border: 1px solid var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 10px rgba(0,245,168,0.25);
+  }
+  #compassArrow {
+    color: var(--accent);
+    font-size: 1.1rem;
+    line-height: 1;
+    text-shadow: 0 0 8px rgba(0,245,168,0.6);
+    transition: transform 0.15s ease-out;
+  }
+
+  /* CROSSHAIR */
+  #crosshair {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    width: 16px; height: 16px;
+  }
+  #crosshair::before, #crosshair::after {
+    content:'';
+    position: absolute;
+    background: rgba(255,255,255,0.55);
+  }
+  #crosshair::before { width:1px; height:100%; left:50%; top:0; }
+  #crosshair::after  { width:100%; height:1px; top:50%; left:0; }
+
+  /* OVERLAY */
+  #overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  #hud {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 15;
+  }
+
+  #minimap-wrap {
+    position: fixed;
+    top: calc(48px + env(safe-area-inset-top));
+    right: calc(10px + env(safe-area-inset-right));
+    z-index: 15;
+  }
+
+  #crosshair {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    width: 16px; height: 16px;
+    z-index: 14;
+  }
+
+  #pauseOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 18;
+  }
+
+  #menuMazeBg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+  }
+
+  #overlay::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, rgba(10,14,12,0.42) 0%, rgba(8,10,16,0.62) 100%);
+    backdrop-filter: blur(1px);
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  #overlay-content {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+  }
+
+  #overlay h2 {
+    font-family: 'Creepster', cursive;
+    font-size: clamp(1.8rem, 7vw, 2.6rem);
+    letter-spacing: 0.05em;
+    line-height: 1.3;
+    background: linear-gradient(90deg, var(--accent), var(--accent3), var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 0 18px rgba(0,245,168,0.5));
+  }
+
+  #overlay p {
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.7;
+    max-width: 260px;
+    letter-spacing: 0.04em;
+  }
+
+  #overlay p b { color: var(--text); }
+
+  .btn {
+    background: transparent;
+    border: 1.5px solid var(--accent);
+    color: var(--accent);
+    font-family: 'Chakra Petch', sans-serif;
+    font-weight: 700;
+    font-size: 0.78rem;
+    letter-spacing: 0.15em;
+    padding: 10px 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: background 0.15s, color 0.15s, box-shadow 0.15s, transform 0.1s;
+    touch-action: manipulation;
+  }
+  .btn:hover, .btn:focus {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #0c0f1f;
+    box-shadow: 0 0 28px rgba(0,245,168,0.5), 0 0 50px rgba(255,95,216,0.3);
+    outline: none;
+    transform: translateY(-1px);
+  }
+
+  /* CONTROLS — superposés en bas du viewport pendant le jeu, à deux mains */
+  #dpad {
+    display: none;
+    position: absolute;
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    left: calc(14px + env(safe-area-inset-left));
+    z-index: 5;
+    grid-template-columns: repeat(3, 44px);
+    grid-template-rows: repeat(3, 44px);
+    gap: 4px;
+    opacity: 0.88;
+  }
+
+
+  .dkey {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, rgba(26,31,58,0.85) 0%, rgba(34,27,63,0.85) 100%);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.08s, transform 0.05s, box-shadow 0.1s;
+    touch-action: none;
+    backdrop-filter: blur(2px);
+  }
+  .dkey:active, .dkey.pressed {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-color: var(--accent);
+    color: #0c0f1f;
+    box-shadow: 0 0 18px rgba(0,245,168,0.5);
+    transform: scale(0.91);
+  }
+  .dkey.fwd      { grid-column: 2; grid-row: 1; }
+  .dkey.strafeL  { grid-column: 1; grid-row: 2; }
+  .dkey.back     { grid-column: 2; grid-row: 2; }
+  .dkey.strafeR  { grid-column: 3; grid-row: 2; }
+
+  .rkey {
+    width: 54px; height: 54px;
+    border-radius: 50%;
+    font-size: 1.3rem;
+  }
+
+  #menuOptions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  select {
+    background: linear-gradient(135deg, var(--surface) 0%, #221b3f 100%);
+    border: 1px solid var(--accent3);
+    color: var(--text);
+    font-family: 'Chakra Petch', sans-serif;
+    font-weight: 600;
+    font-size: 0.75rem;
+    padding: 8px 30px 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    outline: none;
+    letter-spacing: 0.04em;
+    transition: box-shadow 0.15s, border-color 0.15s;
+    touch-action: manipulation;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: linear-gradient(135deg, var(--surface) 0%, #221b3f 100%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23ffb627' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: 0 0, right 12px center;
+    background-size: 100% 100%, 10px 6px;
+  }
+  select:focus { border-color: var(--accent); box-shadow: 0 0 14px rgba(0,245,168,0.35); }
+  select option {
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  /* win flash */
+  @keyframes winpulse {
+    0%,100% { box-shadow: 0 0 0 1px #00422a, 0 0 60px rgba(0,229,160,0.06); }
+    50%      { box-shadow: 0 0 0 2px var(--accent), 0 0 80px rgba(0,229,160,0.35); }
+  }
+  #viewport.win { animation: winpulse 0.6s ease 3; }
+
+  /* low time warning */
+  @keyframes timepulse {
+    0%,100% { box-shadow: 0 0 0 1px #5a1414, 0 0 30px rgba(255,80,80,0.08); }
+    50%      { box-shadow: 0 0 0 2px #ff5050, 0 0 50px rgba(255,80,80,0.35); }
+  }
+  #viewport.timeWarn { animation: timepulse 0.8s ease infinite; }
+
+  /* timeout / game over flash */
+  @keyframes timeoutflash {
+    0%   { box-shadow: 0 0 0 3px #ff5050, 0 0 90px rgba(255,80,80,0.5); }
+    100% { box-shadow: 0 0 0 1px #1e2d40, 0 0 0 rgba(255,80,80,0); }
+  }
+  #viewport.timeout { animation: timeoutflash 0.7s ease 1; }
+
+  /* collision contre un mur — flash bref et subtil, ne doit pas gêner le jeu */
+  @keyframes bumpflash {
+    0%   { box-shadow: inset 0 0 0 0 rgba(255,80,80,0); }
+    25%  { box-shadow: inset 0 0 60px 6px rgba(255,80,80,0.35); }
+    100% { box-shadow: inset 0 0 0 0 rgba(255,80,80,0); }
+  }
+  #viewport.bump { animation: bumpflash 0.22s ease-out 1; }
+</style>
+</head>
+<body>
+<div id="game-container">
+  <div id="viewport">
+    <canvas id="view"></canvas>
+
+    <div id="hud">
+      <div class="title">LABYRINTHE</div>
+      <div class="stats">
+        <div>PAS&nbsp;<span id="hMoves">0</span></div>
+        <div><span id="hTimeLabel">TEMPS</span>&nbsp;<span id="hTime">0:00</span></div>
+        <div>NIV&nbsp;<span id="hLevel">1</span></div>
+        <div id="hTheme" style="color:var(--accent)">BRIQUES</div>
+        <div id="hWeather">☀️</div>
+        <button id="pauseBtn" title="Pause">⏸</button>
+      </div>
+    </div>
+
+    <div id="minimap-wrap">
+      <button id="minimap-toggle">CARTE ▲</button>
+      <canvas id="minimap"></canvas>
+      <div id="compass" title="Direction de la sortie">
+        <div id="compassArrow">↑</div>
+      </div>
+    </div>
+    </div>
+    <div id="crosshair"></div>
+
+    <div id="pauseOverlay">
+      <h2>PAUSE</h2>
+      <button class="btn" id="resumeBtn">Reprendre</button>
+      <button class="btn" id="quitToMenuBtn" style="border-color:var(--muted);color:var(--muted);font-size:0.65rem;padding:8px 20px;">Quitter vers le menu</button>
+    </div>
+
+    <div id="dpad">
+      <button class="dkey fwd"     data-action="fwd">▲</button>
+      <button class="dkey strafeL" data-action="strafeL">◀</button>
+      <button class="dkey back"    data-action="back">▼</button>
+      <button class="dkey strafeR" data-action="strafeR">▶</button>
+    </div>
+
+    <div id="overlay">
+      <canvas id="menuMazeBg"></canvas>
+      <div id="overlay-content">
+      <h2>LABYRINTHE</h2>
+      <button class="btn" id="helpToggleBtn" style="display:none;font-size:0.6rem;padding:6px 16px;border-color:var(--muted);color:var(--muted);">? Comment jouer</button>
+      <p id="introText">Explorez le labyrinthe en vue première personne et trouvez la <b style="color:#22c55e">ligne d'arrivée verte</b>.<br><br>
+         <b>↑↓</b> Avancer / Reculer<br>
+         <b>←→</b> Tourner<br>
+         <b>Q / E</b> Déplacement latéral<br>
+         Ou utilisez les boutons ci-dessous.<br><br>
+         <b style="color:#ff5050">⏱ À partir du niveau 2 :</b> une limite de temps apparaît. Trop lent = Game Over !
+      </p>
+      <div id="menuOptions">
+        <select id="sizeSelect">
+          <option value="11">Petit 11×11</option>
+          <option value="17" selected>Moyen 17×17</option>
+          <option value="25">Grand 25×25</option>
+        </select>
+        <select id="themeSelect">
+          <option value="auto" selected>Décor : Auto</option>
+          <option value="briques">Décor : Briques</option>
+          <option value="maïs">Décor : Maïs</option>
+          <option value="buissons">Décor : Buissons</option>
+        </select>
+      </div>
+      <button class="btn" id="startBtn">Entrer dans le labyrinthe</button>
+      <button class="btn" id="resetProgressBtn" style="display:none;border-color:var(--muted);color:var(--muted);font-size:0.62rem;padding:7px 18px;">Recommencer à zéro</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Constants ─────────────────────────────────────────────────────────
+const W = 320, H = 180; // internal render resolution (upscaled by CSS)
+const FOV = Math.PI / 3;  // 60°
+const HALF_FOV = FOV / 2;
+const NUM_RAYS = W;
+let MAX_DEPTH = 20;
+const TURN_SPEED = 0.055;
+const MOVE_SPEED = 0.09;
+
+// ── Canvas setup ──────────────────────────────────────────────────────
+const canvas  = document.getElementById('view');
+const ctx     = canvas.getContext('2d');
+
+// Canvas offscreen pour le rendu pixel (320×180 fixe)
+const offscreen = document.createElement('canvas');
+offscreen.width  = W;
+offscreen.height = H;
+const offCtx = offscreen.getContext('2d');
+
+// Le canvas principal (#view) prend toute la taille de l'écran
+// On dessine dans offscreen puis on copie avec drawImage (stretch auto)
+canvas.width  = window.innerWidth  || 360;
+canvas.height = window.innerHeight || 640;
+
+const mmCanvas = document.getElementById('minimap');
+const mmCtx    = mmCanvas.getContext('2d');
+
+// ── State ─────────────────────────────────────────────────────────────
+let MAP, COLS, ROWS;
+let px, py, pAngle;    // player position (float) and angle
+let exitX, exitY;
+let running = false;
+let paused = false;
+let level = 1, moves = 0;
+// Mémorise le choix de taille/décor du menu, car le menu (et donc ses <select>)
+// est détruit une fois la partie lancée (innerHTML remplacé par les écrans de fin).
+let currentMazeSize = 17;
+let currentThemeChoice = 'auto';
+let timerStart, elapsed = 0, timerInterval;
+let timeLimit = 0; // seconds; 0 = no limit (level 1 only)
+
+// ── Progress persistence ────────────────────────────────────────────
+const SAVE_KEY = 'labyrinthe3d_progress';
+
+function saveProgress() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ level }));
+  } catch(e) { /* localStorage indisponible, on ignore silencieusement */ }
+}
+
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return 1;
+    const data = JSON.parse(raw);
+    return (data && Number.isInteger(data.level) && data.level >= 1) ? data.level : 1;
+  } catch(e) { return 1; }
+}
+
+function clearProgress() {
+  try { localStorage.removeItem(SAVE_KEY); } catch(e) {}
+}
+let keys = {};
+
+// ── Weather ──────────────────────────────────────────────────────────
+let weather = 'clear'; // 'clear' | 'rain'
+let birds = [];
+let raindrops = [];
+
+function rollWeather() {
+  weather = Math.random() < 0.5 ? 'clear' : 'rain';
+  const hw = document.getElementById('hWeather');
+  if (hw) hw.textContent = weather === 'clear' ? '☀️' : '🌧️';
+  if (weather === 'clear') {
+    birds = [];
+    const count = 3 + Math.floor(Math.random()*3);
+    for (let i=0; i<count; i++) {
+      birds.push({
+        angle: Math.random()*Math.PI*2,      // position around player, in world angle
+        dist: 6 + Math.random()*10,           // far away in world units (affects parallax)
+        height: 0.08 + Math.random()*0.22,    // vertical position in sky (0=horizon,1=top)
+        speed: (0.06 + Math.random()*0.08) * (Math.random()<0.5?1:-1),
+        flap: Math.random()*Math.PI*2,
+        size: 2 + Math.random()*1.5,
+      });
+    }
+    raindrops = [];
+  } else {
+    raindrops = [];
+    const count = 110;
+    for (let i=0; i<count; i++) {
+      raindrops.push({
+        x: Math.random()*W,
+        y: Math.random()*H,
+        speed: 3 + Math.random()*4,
+        len: 4 + Math.random()*5,
+      });
+    }
+    birds = [];
+  }
+}
+
+// ── Maze (DFS) ────────────────────────────────────────────────────────
+function buildMaze(cols, rows) {
+  const g = new Uint8Array(cols * rows);
+  const i = (x,y) => y*cols+x;
+  function carve(x,y) {
+    g[i(x,y)] = 1;
+    const d = [[0,-2],[0,2],[-2,0],[2,0]].sort(()=>Math.random()-0.5);
+    for (const [dx,dy] of d) {
+      const nx=x+dx, ny=y+dy;
+      if (nx>0&&ny>0&&nx<cols-1&&ny<rows-1&&g[i(nx,ny)]===0) {
+        g[i(x+dx/2,y+dy/2)]=1; carve(nx,ny);
+      }
+    }
+  }
+  carve(1,1);
+  g[i(1,1)]=1; g[i(cols-2,rows-2)]=1;
+  return g;
+}
+
+// ── Progression dynamique ─────────────────────────────────────────────
+function getLevelConfig(lvl) {
+  if (lvl <= 10) {
+    const sz = Math.min(17, 11 + Math.floor((lvl-1)*0.7)*2);
+    return { phase:1, label:'APPRENTI', cols: sz%2===0?sz+1:sz, timeLimit:0, mapVisible:true, fog:20, color:'#00f5a8' };
+  } else if (lvl <= 20) {
+    const sz = Math.min(25, 17 + Math.floor((lvl-11)*0.8)*2);
+    const s = sz%2===0?sz+1:sz;
+    return { phase:2, label:'DÉFI', cols:s, timeLimit:Math.round(s*s*0.75*Math.max(0.6,1-(lvl-11)*0.04)), mapVisible:false, fog:18, color:'#ffb627' };
+  } else if (lvl <= 30) {
+    const sz = Math.min(31, 25 + Math.floor((lvl-21)*0.6)*2);
+    const s = sz%2===0?sz+1:sz;
+    return { phase:3, label:'EXPERT', cols:s, timeLimit:Math.round(s*s*0.65*Math.max(0.55,1-(lvl-21)*0.04)), mapVisible:false, fog:16, color:'#ff5050' };
+  } else {
+    const sz = Math.min(39, 33 + Math.floor(Math.min(lvl-31,10)*0.6)*2);
+    const s = sz%2===0?sz+1:sz;
+    return { phase:4, label:'☠ CAUCHEMAR', cols:s, timeLimit:Math.round(s*s*0.55*Math.max(0.4,0.7-(lvl-31)*0.03)), mapVisible:false, fog:Math.max(10,15-Math.floor((lvl-31)*0.5)), color:'#ff00ff' };
+  }
+}
+
+let currentLevelConfig = getLevelConfig(1);
+
+function computeTimeLimit(lvl) {
+  return getLevelConfig(lvl).timeLimit;
+}
+
+function init(keepLevel=false, forceLevel=null) {
+  if (forceLevel !== null) level = forceLevel;
+  else if (!keepLevel) level = 1;
+
+  currentLevelConfig = getLevelConfig(level);
+  const sz = currentLevelConfig.cols;
+  COLS = sz; ROWS = sz;
+  currentMazeSize = sz;
+
+  MAP  = buildMaze(COLS, ROWS);
+  px = 1.5; py = 1.5; pAngle = 0;
+  exitX = COLS-2; exitY = ROWS-2;
+  moves = 0; elapsed = 0;
+  timeLimit = currentLevelConfig.timeLimit;
+  MAX_DEPTH = currentLevelConfig.fog;
+
+  rollWeather();
+
+  document.getElementById('hMoves').textContent = 0;
+  document.getElementById('hLevel').textContent = level;
+  document.getElementById('hTheme').textContent = currentLevelConfig.label;
+  document.getElementById('hTheme').style.color = currentLevelConfig.color;
+  updateTimeDisplay();
+  updateTimeDisplay();
+  clearInterval(timerInterval);
+  timerStart = Date.now();
+  timerInterval = setInterval(updateTimer, 500);
+  running = true;
+  paused = false;
+  document.getElementById('pauseOverlay').style.display = 'none';
+  document.getElementById('overlay').style.display = 'none';
+  document.getElementById('hud').style.display = 'flex';
+  document.getElementById('minimap-wrap').style.display = currentLevelConfig.mapVisible ? 'flex' : 'none';
+  document.getElementById('viewport').classList.remove('win');
+  document.getElementById('viewport').classList.remove('timeWarn');
+
+  const mm = Math.min(80, Math.floor(Math.min(window.innerWidth, 600) * 0.18));
+  mmCanvas.width  = mm; mmCanvas.height = mm;
+  mmCanvas.style.width  = mm + 'px';
+  mmCanvas.style.height = mm + 'px';
+
+  scaleCanvas();
+  document.getElementById('viewport').classList.add('active');
+  requestAnimationFrame(loop);
+}
+
+function scaleCanvas() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  frameImg = null; // force recréation du buffer
+}
+
+window.addEventListener('resize', () => {
+  scaleCanvas();
+  renderMenuMazeBg();
+});
+
+function fmtTime(s) {
+  const m = Math.floor(s/60), sec = String(s%60).padStart(2,'0');
+  return `${m}:${sec}`;
+}
+
+function updateTimeDisplay() {
+  const el = document.getElementById('hTime');
+  const label = document.getElementById('hTimeLabel');
+  if (timeLimit > 0) {
+    label.textContent = 'LIMITE';
+    const remaining = Math.max(0, timeLimit - elapsed);
+    el.textContent = fmtTime(remaining);
+    const urgent = remaining <= 10;
+    el.style.color = urgent ? '#ff5050' : '';
+    label.style.color = urgent ? '#ff5050' : '';
+    document.getElementById('viewport').classList.toggle('timeWarn', urgent && remaining > 0);
+  } else {
+    label.textContent = 'TEMPS';
+    el.textContent = fmtTime(elapsed);
+    el.style.color = '';
+    label.style.color = '';
+  }
+}
+
+function updateTimer() {
+  if (!running || paused) return;
+  elapsed = Math.floor((Date.now()-timerStart)/1000);
+  updateTimeDisplay();
+  if (timeLimit > 0 && elapsed >= timeLimit) {
+    timeOutGame();
+  }
+}
+
+// ── Raycasting ────────────────────────────────────────────────────────
+const EXIT_LIGHT = '#22c55e';
+const EXIT_DARK  = '#15803d';
+
+// Themes by level (cycles every 3 levels): briques → maïs → buissons
+const THEMES = [
+  {
+    name: 'briques',
+    floorName: 'route',
+    sky: ['#1a1212', '#2a1815'],
+  },
+  {
+    name: 'maïs',
+    floorName: 'terre',
+    sky: ['#1a1c0e', '#2a2c14'],
+  },
+  {
+    name: 'buissons',
+    floorName: 'pelouse',
+    sky: ['#0c1810', '#10241a'],
+  },
+];
+
+function themeForLevel(lvl) {
+  const sel = document.getElementById('themeSelect');
+  if (sel) currentThemeChoice = sel.value;
+  if (currentThemeChoice !== 'auto') {
+    return THEMES.find(t => t.name === currentThemeChoice) || THEMES[0];
+  }
+  return THEMES[(lvl - 1) % THEMES.length];
+}
+
+// Procedural wall textures, 64x64, generated once per theme and cached
+const TEX_SIZE = 64;
+const textureCache = {};
+
+function genBrickTexture() {
+  const c = document.createElement('canvas');
+  c.width = TEX_SIZE; c.height = TEX_SIZE;
+  const tx = c.getContext('2d');
+  const S = TEX_SIZE;
+
+  // Mur de brique vieilli — base sombre avec variation de teinte
+  const baseColors = ['#8b3a28','#7a2f22','#6e2a1e','#923d2a','#7f3326'];
+  const rowH = 10, brickW = 16;
+  for (let y=0; y<S; y+=rowH) {
+    const offset = ((y/rowH)%2===0) ? 0 : brickW/2;
+    for (let x=-brickW; x<S+brickW; x+=brickW) {
+      const bx = x+offset;
+      const baseColor = baseColors[Math.floor(Math.random()*baseColors.length)];
+      tx.fillStyle = baseColor;
+      tx.fillRect(bx+1, y+1, brickW-2, rowH-2);
+      // Variation de teinte sur chaque brique
+      const shade = 0.8 + Math.random()*0.4;
+      tx.fillStyle = `rgba(${Math.round(shade>1?255:180*shade)},${Math.round(80*shade)},${Math.round(50*shade)},0.3)`;
+      tx.fillRect(bx+1, y+1, brickW-2, rowH-2);
+      // Taches d'humidité / noircissements
+      if (Math.random() < 0.3) {
+        tx.fillStyle = 'rgba(0,0,0,0.2)';
+        tx.fillRect(bx+2, y+2, Math.random()*8+2, Math.random()*4+1);
+      }
+      // Highlights en haut des briques (lumière)
+      tx.fillStyle = 'rgba(255,180,120,0.12)';
+      tx.fillRect(bx+1, y+1, brickW-2, 2);
+    }
+  }
+
+  // Joints de mortier plus épais et texturés
+  tx.strokeStyle = '#1a0f0a';
+  tx.lineWidth = 2;
+  for (let y=0; y<=S; y+=rowH) {
+    tx.beginPath(); tx.moveTo(0,y); tx.lineTo(S,y); tx.stroke();
+  }
+  for (let y=0; y<S; y+=rowH) {
+    const offset = ((y/rowH)%2===0) ? 0 : brickW/2;
+    for (let x=-brickW; x<S+brickW; x+=brickW) {
+      tx.beginPath(); tx.moveTo(x+offset,y); tx.lineTo(x+offset,y+rowH); tx.stroke();
+    }
+  }
+
+  // === GRAFFITI TAG coloré ===
+  // Tag "A" stylisé en cyan/turquoise
+  tx.save();
+  tx.strokeStyle = 'rgba(0,220,200,0.9)';
+  tx.lineWidth = 2.5; tx.lineCap = 'round'; tx.lineJoin = 'round';
+  tx.beginPath();
+  tx.moveTo(4,30); tx.lineTo(9,16); tx.lineTo(14,30);
+  tx.moveTo(6,25); tx.lineTo(12,25);
+  tx.stroke();
+  // Contour noir pour lisibilité
+  tx.strokeStyle = 'rgba(0,0,0,0.5)';
+  tx.lineWidth = 4;
+  tx.stroke();
+  tx.strokeStyle = 'rgba(0,220,200,0.9)';
+  tx.lineWidth = 2.5; tx.stroke();
+  tx.restore();
+
+  // Affiche déchirée (rectangle avec papier arraché)
+  tx.save();
+  tx.fillStyle = '#e8d4a0'; // papier jauni
+  tx.fillRect(20, 8, 22, 28);
+  // Papier déchiré en bas
+  tx.fillStyle = '#c4a870';
+  for (let i=0; i<5; i++) {
+    tx.beginPath();
+    tx.moveTo(20+i*4.5, 36);
+    tx.lineTo(22+i*4.5, 36+Math.random()*6-3);
+    tx.lineTo(24+i*4.5, 36);
+    tx.fill();
+  }
+  // Texte illisible sur l'affiche
+  tx.fillStyle = '#333'; tx.font = 'bold 3px sans-serif';
+  tx.fillText('ZONE', 22, 15);
+  tx.fillText('INTERDI', 21, 20);
+  tx.fillStyle = '#cc2200';
+  tx.fillText('TE', 21, 25);
+  // Tache de peinture sur l'affiche
+  tx.fillStyle = 'rgba(255,80,0,0.6)';
+  tx.beginPath(); tx.arc(35, 20, 5, 0, Math.PI*2); tx.fill();
+  tx.restore();
+
+  // Tag "Z" en bas jaune
+  tx.save();
+  tx.strokeStyle = 'rgba(255,220,0,0.85)';
+  tx.lineWidth = 2; tx.lineCap = 'round';
+  tx.beginPath();
+  tx.moveTo(4,44); tx.lineTo(14,44);
+  tx.lineTo(4,56); tx.lineTo(14,56);
+  tx.stroke();
+  tx.restore();
+
+  // Petites taches de peinture spray
+  const sprayColors = ['rgba(255,0,100,0.6)','rgba(0,180,255,0.5)','rgba(100,255,0,0.5)'];
+  for (let i=0; i<8; i++) {
+    tx.fillStyle = sprayColors[i%3];
+    tx.beginPath();
+    tx.arc(Math.random()*S, Math.random()*S, Math.random()*2+0.5, 0, Math.PI*2);
+    tx.fill();
+  }
+
+  return tx.getImageData(0,0,S,S);
+}
+
+function genCornTexture() {
+  const c = document.createElement('canvas');
+  c.width = TEX_SIZE; c.height = TEX_SIZE;
+  const tx = c.getContext('2d');
+  const S = TEX_SIZE;
+
+  // Fond sombre — profondeur du champ de maïs
+  const bg = tx.createLinearGradient(0,0,0,S);
+  bg.addColorStop(0, '#0a1a05');
+  bg.addColorStop(0.4, '#1a3a0a');
+  bg.addColorStop(1, '#0d2008');
+  tx.fillStyle = bg;
+  tx.fillRect(0,0,S,S);
+
+  // Couche de fond : tiges lointaines, sombres
+  for (let x=0; x<S; x+=5) {
+    tx.strokeStyle = `rgba(20,60,10,0.8)`;
+    tx.lineWidth = 1;
+    tx.beginPath(); tx.moveTo(x,S); tx.lineTo(x+Math.random()*4-2,0); tx.stroke();
+  }
+
+  // Tiges principales avec courbe naturelle
+  const stalkW = 8;
+  for (let sx=0; sx<S; sx+=stalkW) {
+    const wobble = Math.sin(sx*0.3)*3;
+    // Tige verte épaisse
+    const stalkGrad = tx.createLinearGradient(sx,0,sx+3,0);
+    stalkGrad.addColorStop(0, '#2d7a10');
+    stalkGrad.addColorStop(0.5, '#4aa020');
+    stalkGrad.addColorStop(1, '#1a5008');
+    tx.strokeStyle = stalkGrad;
+    tx.lineWidth = 3;
+    tx.lineCap = 'butt';
+    tx.beginPath();
+    tx.moveTo(sx+stalkW/2, S);
+    tx.quadraticCurveTo(sx+stalkW/2+wobble, S/2, sx+stalkW/2+wobble*1.5, 0);
+    tx.stroke();
+
+    // Nœuds sur la tige (articulations)
+    for (let ny=0.2; ny<1; ny+=0.25) {
+      const ny_y = S*(1-ny);
+      const nx_x = sx+stalkW/2+wobble*ny;
+      tx.fillStyle = '#3d8a18';
+      tx.beginPath(); tx.arc(nx_x, ny_y, 2, 0, Math.PI*2); tx.fill();
+
+      // Feuilles larges qui partent des nœuds
+      const dir = (Math.floor(ny*10)%2===0) ? 1 : -1;
+      const leafLen = 12 + Math.random()*8;
+      const leafGrad = tx.createLinearGradient(nx_x, ny_y, nx_x+dir*leafLen, ny_y-leafLen*0.5);
+      leafGrad.addColorStop(0, 'rgba(60,160,20,0.9)');
+      leafGrad.addColorStop(0.5, 'rgba(80,200,30,0.8)');
+      leafGrad.addColorStop(1, 'rgba(40,120,15,0.3)');
+      tx.strokeStyle = leafGrad;
+      tx.lineWidth = 3.5;
+      tx.lineCap = 'round';
+      tx.beginPath();
+      tx.moveTo(nx_x, ny_y);
+      tx.quadraticCurveTo(nx_x+dir*leafLen*0.6, ny_y-leafLen*0.3, nx_x+dir*leafLen, ny_y-leafLen*0.5);
+      tx.stroke();
+    }
+
+    // Épi de maïs (visible sur certaines tiges)
+    if (Math.random() < 0.4) {
+      const ey = S*0.35 + Math.random()*S*0.2;
+      const ex = sx+stalkW/2+wobble*0.6;
+      tx.fillStyle = '#d4a020';
+      tx.fillRect(ex-2, ey-6, 4, 12);
+      // Grains jaunes
+      for (let gi=0; gi<6; gi++) {
+        tx.fillStyle = `rgba(220,${160+gi*10},20,0.9)`;
+        tx.fillRect(ex-1.5, ey-5+gi*2, 3, 1.5);
+      }
+      // Soie du maïs (filaments)
+      tx.strokeStyle = 'rgba(220,190,100,0.7)';
+      tx.lineWidth = 0.5;
+      for (let fi=0; fi<4; fi++) {
+        tx.beginPath();
+        tx.moveTo(ex+fi-1, ey-6);
+        tx.lineTo(ex+fi-1-2+fi, ey-10-Math.random()*4);
+        tx.stroke();
+      }
+    }
+  }
+
+  // Lumière solaire filtrant entre les tiges
+  tx.fillStyle = 'rgba(200,255,150,0.04)';
+  for (let i=0; i<3; i++) {
+    const lx = Math.random()*S;
+    tx.save();
+    tx.translate(lx, -5);
+    tx.rotate(0.05);
+    tx.fillRect(-2, 0, 4, S+10);
+    tx.restore();
+  }
+
+  return tx.getImageData(0,0,S,S);
+}
+
+function genBushTexture() {
+  const c = document.createElement('canvas');
+  c.width = TEX_SIZE; c.height = TEX_SIZE;
+  const tx = c.getContext('2d');
+  const S = TEX_SIZE;
+
+  // Fond sombre — intérieur dense de la haie
+  tx.fillStyle = '#0a1f08';
+  tx.fillRect(0,0,S,S);
+
+  // Branches principales (structure de base)
+  tx.strokeStyle = '#3d2010';
+  tx.lineWidth = 2;
+  for (let i=0; i<8; i++) {
+    const bx = Math.random()*S, by = S;
+    tx.beginPath();
+    tx.moveTo(bx, by);
+    tx.quadraticCurveTo(bx+Math.random()*20-10, by*0.5, bx+Math.random()*16-8, 0);
+    tx.stroke();
+  }
+
+  // Couche 1 : feuilles profondes (sombres)
+  for (let i=0; i<60; i++) {
+    const seed = i*131.7;
+    const x = ((Math.sin(seed)*0.5+0.5)*S);
+    const y = ((Math.cos(seed*1.3)*0.5+0.5)*S);
+    const r = 3 + (Math.sin(seed*2.1)*0.5+0.5)*3;
+    tx.fillStyle = `rgba(${10+Math.random()*20},${40+Math.random()*30},${10+Math.random()*15},0.9)`;
+    tx.beginPath(); tx.arc(x,y,r,0,Math.PI*2); tx.fill();
+  }
+
+  // Couche 2 : feuilles mid (vertes variées)
+  const greenShades = ['#2d6b15','#3a8520','#28580f','#4a9a28','#1e4a0c'];
+  for (let i=0; i<80; i++) {
+    const x = Math.random()*S, y = Math.random()*S;
+    const r = 2 + Math.random()*3;
+    tx.fillStyle = greenShades[Math.floor(Math.random()*greenShades.length)];
+    // Forme de feuille ovale
+    tx.save();
+    tx.translate(x,y);
+    tx.rotate(Math.random()*Math.PI);
+    tx.scale(1, 0.6);
+    tx.beginPath(); tx.arc(0,0,r,0,Math.PI*2); tx.fill();
+    tx.restore();
+  }
+
+  // Couche 3 : feuilles de surface lumineuses
+  for (let i=0; i<50; i++) {
+    const x = Math.random()*S, y = Math.random()*S;
+    const r = 1.5 + Math.random()*2.5;
+    const bright = 0.8 + Math.random()*0.5;
+    tx.fillStyle = `rgba(${Math.round(60*bright)},${Math.round(150*bright)},${Math.round(35*bright)},0.85)`;
+    tx.save();
+    tx.translate(x,y);
+    tx.rotate(Math.random()*Math.PI);
+    tx.scale(1,0.55);
+    tx.beginPath(); tx.arc(0,0,r,0,Math.PI*2); tx.fill();
+    tx.restore();
+  }
+
+  // Baies rouges parsemées
+  for (let i=0; i<12; i++) {
+    const x = Math.random()*S, y = Math.random()*S;
+    tx.fillStyle = '#cc2020';
+    tx.beginPath(); tx.arc(x,y,1.5,0,Math.PI*2); tx.fill();
+    tx.fillStyle = 'rgba(255,100,100,0.6)';
+    tx.beginPath(); tx.arc(x-0.5,y-0.5,0.7,0,Math.PI*2); tx.fill();
+  }
+
+  // Quelques fleurs blanches
+  for (let i=0; i<6; i++) {
+    const x = Math.random()*S, y = Math.random()*S;
+    for (let p=0; p<5; p++) {
+      const pa = p*Math.PI*2/5;
+      tx.fillStyle = 'rgba(240,240,230,0.85)';
+      tx.beginPath(); tx.arc(x+Math.cos(pa)*2.5,y+Math.sin(pa)*2.5,1.5,0,Math.PI*2); tx.fill();
+    }
+    tx.fillStyle = '#ffd040';
+    tx.beginPath(); tx.arc(x,y,1.2,0,Math.PI*2); tx.fill();
+  }
+
+  // Reflets de lumière sur le feuillage
+  tx.fillStyle = 'rgba(180,255,120,0.06)';
+  tx.beginPath(); tx.arc(S*0.3,S*0.25,S*0.2,0,Math.PI*2); tx.fill();
+
+  return tx.getImageData(0,0,S,S);
+}
+
+// ── Floor textures ──────────────────────────────────────────────────
+function genRoadTexture() {
+  const c = document.createElement('canvas');
+  c.width = TEX_SIZE; c.height = TEX_SIZE;
+  const tx = c.getContext('2d');
+  const S = TEX_SIZE;
+
+  // Asphalte de base — gris foncé irrégulier
+  tx.fillStyle = '#252528';
+  tx.fillRect(0,0,S,S);
+
+  // Texture granuleuse de l'asphalte
+  for (let i=0; i<400; i++) {
+    const x = Math.random()*S, y = Math.random()*S;
+    const v = Math.floor(30+Math.random()*50);
+    tx.fillStyle = `rgba(${v},${v},${v+4},0.5)`;
+    tx.fillRect(x, y, 1, 1);
+  }
+
+  // Fissures dans l'asphalte
+  tx.strokeStyle = 'rgba(0,0,0,0.7)';
+  tx.lineWidth = 1;
+  for (let i=0; i<5; i++) {
+    const sx = Math.random()*S, sy = Math.random()*S;
+    tx.beginPath(); tx.moveTo(sx,sy);
+    let cx = sx, cy = sy;
+    for (let s=0; s<4; s++) {
+      cx += Math.random()*8-4; cy += Math.random()*6+2;
+      tx.lineTo(Math.min(S,Math.max(0,cx)), Math.min(S,Math.max(0,cy)));
+    }
+    tx.stroke();
+    // Liseré blanc sur la fissure (asphalte cassé)
+    tx.strokeStyle = 'rgba(80,80,80,0.4)'; tx.lineWidth = 0.5;
+    tx.stroke();
+    tx.strokeStyle = 'rgba(0,0,0,0.7)'; tx.lineWidth = 1;
+  }
+
+  // Taches sombres (huile/eau)
+  for (let i=0; i<4; i++) {
+    const x = Math.random()*S, y = Math.random()*S;
+    tx.fillStyle = 'rgba(10,10,20,0.5)';
+    tx.beginPath(); tx.ellipse(x,y,Math.random()*6+2,Math.random()*3+1,Math.random()*Math.PI,0,Math.PI*2); tx.fill();
+  }
+
+  // Marques blanches (ligne de route efface)
+  tx.strokeStyle = 'rgba(200,200,180,0.15)';
+  tx.lineWidth = 3;
+  tx.setLineDash([8,6]);
+  tx.beginPath(); tx.moveTo(S/2,0); tx.lineTo(S/2,S); tx.stroke();
+  tx.setLineDash([]);
+
+  // Petites pierres/gravillons
+  for (let i=0; i<20; i++) {
+    const x = Math.random()*S, y = Math.random()*S;
+    const v = 60+Math.random()*40;
+    tx.fillStyle = `rgba(${v},${v},${v},0.8)`;
+    tx.beginPath(); tx.arc(x,y,0.8,0,Math.PI*2); tx.fill();
+  }
+
+  return tx.getImageData(0,0,S,S);
+}
+
+function genDirtTexture() {
+  const c = document.createElement('canvas');
+  c.width = TEX_SIZE; c.height = TEX_SIZE;
+  const tx = c.getContext('2d');
+  const S = TEX_SIZE;
+
+  // Base terre — brun chaud
+  tx.fillStyle = '#7a5830';
+  tx.fillRect(0,0,S,S);
+
+  // Variations de teinte (sèche/humide)
+  for (let i=0; i<200; i++) {
+    const x = Math.random()*S, y = Math.random()*S;
+    const r = 1 + Math.random()*5;
+    const warm = Math.random() > 0.5;
+    tx.fillStyle = warm
+      ? `rgba(${120+Math.random()*40},${85+Math.random()*30},${30+Math.random()*20},0.6)`
+      : `rgba(${60+Math.random()*30},${40+Math.random()*20},${15+Math.random()*10},0.5)`;
+    tx.beginPath(); tx.arc(x,y,r,0,Math.PI*2); tx.fill();
+  }
+
+  // Traces de pas (empreintes)
+  for (let i=0; i<3; i++) {
+    const bx = Math.random()*S*0.7+S*0.1;
+    const by = Math.random()*S*0.7+S*0.1;
+    tx.fillStyle = 'rgba(40,25,10,0.5)';
+    // Empreinte gauche
+    tx.beginPath(); tx.ellipse(bx, by, 3, 5, 0.2, 0, Math.PI*2); tx.fill();
+    // Empreinte droite
+    tx.beginPath(); tx.ellipse(bx+7, by+8, 3, 5, -0.2, 0, Math.PI*2); tx.fill();
+  }
+
+  // Petits cailloux
+  for (let i=0; i<25; i++) {
+    const x = Math.random()*S, y = Math.random()*S;
+    const v = 100+Math.random()*60;
+    tx.fillStyle = `rgba(${v},${v-10},${v-20},0.8)`;
+    tx.save(); tx.translate(x,y); tx.rotate(Math.random()*Math.PI);
+    tx.beginPath(); tx.ellipse(0,0,Math.random()*2+1,Math.random()*1.5+0.5,0,0,Math.PI*2); tx.fill();
+    tx.restore();
+  }
+
+  // Brins d'herbe clairsemés
+  tx.strokeStyle = 'rgba(80,120,30,0.7)'; tx.lineWidth = 1;
+  for (let i=0; i<30; i++) {
+    const x = Math.random()*S, y = Math.random()*S;
+    const h = 3+Math.random()*5;
+    tx.beginPath(); tx.moveTo(x,y);
+    tx.quadraticCurveTo(x+Math.random()*4-2,y-h*0.5,x+Math.random()*3-1.5,y-h);
+    tx.stroke();
+  }
+
+  // Racines / fissures séchées
+  tx.strokeStyle = 'rgba(50,30,10,0.4)'; tx.lineWidth = 0.5;
+  for (let i=0; i<6; i++) {
+    tx.beginPath(); tx.moveTo(Math.random()*S, Math.random()*S);
+    for (let s=0; s<3; s++) tx.lineTo(Math.random()*S, Math.random()*S);
+    tx.stroke();
+  }
+
+  return tx.getImageData(0,0,S,S);
+}
+
+function genGrassTexture() {
+  const c = document.createElement('canvas');
+  c.width = TEX_SIZE; c.height = TEX_SIZE;
+  const tx = c.getContext('2d');
+  const S = TEX_SIZE;
+
+  // Base herbe — vert riche
+  tx.fillStyle = '#1e4a10';
+  tx.fillRect(0,0,S,S);
+
+  // Bandes de lumière/ombre (tonte de pelouse)
+  for (let i=0; i<4; i++) {
+    tx.fillStyle = i%2===0 ? 'rgba(60,120,20,0.15)' : 'rgba(0,20,0,0.1)';
+    tx.fillRect(0,i*S/4, S, S/4);
+  }
+
+  // Brins d'herbe courts et denses
+  for (let i=0; i<300; i++) {
+    const x = Math.random()*S, y = Math.random()*S;
+    const h = 3+Math.random()*5;
+    const lean = Math.random()*3-1.5;
+    const shade = 0.6+Math.random()*0.8;
+    tx.strokeStyle = `rgba(${Math.round(40*shade)},${Math.round(120*shade)},${Math.round(20*shade)},0.8)`;
+    tx.lineWidth = 0.8+Math.random()*0.7;
+    tx.beginPath(); tx.moveTo(x,y);
+    tx.quadraticCurveTo(x+lean*0.5, y-h*0.6, x+lean, y-h);
+    tx.stroke();
+  }
+
+  // Feuilles plus larges
+  for (let i=0; i<40; i++) {
+    const x = Math.random()*S, y = Math.random()*S;
+    const h = 6+Math.random()*6;
+    tx.strokeStyle = `rgba(50,140,25,0.7)`;
+    tx.lineWidth = 1.5;
+    tx.beginPath(); tx.moveTo(x,y);
+    tx.quadraticCurveTo(x+Math.random()*6-3, y-h*0.5, x+Math.random()*4-2, y-h);
+    tx.stroke();
+  }
+
+  // Quelques pissenlits / petites fleurs
+  for (let i=0; i<5; i++) {
+    const x = Math.random()*S, y = Math.random()*S;
+    tx.fillStyle = '#ffd800';
+    for (let p=0; p<6; p++) {
+      const pa = p*Math.PI/3;
+      tx.beginPath(); tx.arc(x+Math.cos(pa)*2,y+Math.sin(pa)*2,1.2,0,Math.PI*2); tx.fill();
+    }
+    tx.fillStyle = '#ff8800';
+    tx.beginPath(); tx.arc(x,y,1.5,0,Math.PI*2); tx.fill();
+  }
+
+  // Trèfles
+  for (let i=0; i<4; i++) {
+    const x = Math.random()*S, y = Math.random()*S;
+    tx.fillStyle = 'rgba(30,100,15,0.9)';
+    for (let p=0; p<3; p++) {
+      const pa = p*Math.PI*2/3;
+      tx.beginPath(); tx.arc(x+Math.cos(pa)*2.5,y+Math.sin(pa)*2.5,2.5,0,Math.PI*2); tx.fill();
+    }
+  }
+
+  // Rosée — petits points brillants
+  for (let i=0; i<15; i++) {
+    const x = Math.random()*S, y = Math.random()*S;
+    tx.fillStyle = 'rgba(200,240,255,0.6)';
+    tx.beginPath(); tx.arc(x,y,0.8,0,Math.PI*2); tx.fill();
+  }
+
+  return tx.getImageData(0,0,S,S);
+}
+
+function getTexture(themeName) {
+  if (textureCache[themeName]) return textureCache[themeName];
+  let data;
+  if (themeName === 'briques')  data = genBrickTexture();
+  else if (themeName === 'maïs') data = genCornTexture();
+  else                            data = genBushTexture();
+  textureCache[themeName] = data;
+  return data;
+}
+
+const floorTextureCache = {};
+function getFloorTexture(floorName) {
+  if (floorTextureCache[floorName]) return floorTextureCache[floorName];
+  let data;
+  if (floorName === 'route')      data = genRoadTexture();
+  else if (floorName === 'terre') data = genDirtTexture();
+  else                              data = genGrassTexture();
+  floorTextureCache[floorName] = data;
+  return data;
+}
+
+function isWall(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  if (xi < 0 || yi < 0 || xi >= COLS || yi >= ROWS) return true;
+  return MAP[yi*COLS+xi] === 0;
+}
+
+function isExit(xi, yi) { return xi===exitX && yi===exitY; }
+
+// ── Weather rendering ────────────────────────────────────────────────
+function drawBirds() {
+  for (const b of birds) {
+    b.angle += b.speed * 0.016;
+    b.flap += 0.25;
+
+    // relative angle to player view direction
+    let rel = b.angle - pAngle;
+    while (rel > Math.PI) rel -= Math.PI*2;
+    while (rel < -Math.PI) rel += Math.PI*2;
+    if (Math.abs(rel) > HALF_FOV + 0.15) continue; // outside view
+
+    const sx = (0.5 + rel / FOV) * W;
+    const sy = (1 - b.height) * (H/2) * 0.85;
+
+    const wingPhase = Math.sin(b.flap);
+    const wingSpread = b.size * (1 + wingPhase*0.6);
+
+    ctx.strokeStyle = 'rgba(20,22,28,0.8)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(sx - wingSpread, sy - wingPhase*1.5);
+    ctx.lineTo(sx, sy);
+    ctx.lineTo(sx + wingSpread, sy - wingPhase*1.5);
+    ctx.stroke();
+  }
+}
+
+function drawRainBackdrop() {
+  ctx.strokeStyle = 'rgba(200,210,225,0.35)';
+  ctx.lineWidth = 1;
+  for (const d of raindrops) {
+    if (d.y < H/2) {
+      ctx.beginPath();
+      ctx.moveTo(d.x, d.y);
+      ctx.lineTo(d.x - 2, d.y + d.len);
+      ctx.stroke();
+    }
+    d.y += d.speed;
+    d.x -= 0.6;
+    if (d.y > H) {
+      d.y = -d.len;
+      d.x = Math.random()*W;
+    }
+    if (d.x < 0) d.x = W;
+  }
+  // subtle fog tint over horizon
+  ctx.fillStyle = 'rgba(120,130,140,0.08)';
+  ctx.fillRect(0, H/2 - 20, W, 20);
+}
+
+function drawRainForeground() {
+  ctx.strokeStyle = 'rgba(190,205,220,0.22)';
+  ctx.lineWidth = 1;
+  for (const d of raindrops) {
+    if (d.y > H/2) {
+      ctx.beginPath();
+      ctx.moveTo(d.x, d.y);
+      ctx.lineTo(d.x - 2.5, d.y + d.len);
+      ctx.stroke();
+    }
+  }
+}
+
+// Reusable pixel buffer for fast rendering
+let frameImg = null;
+let frameBuf = null;
+
+function ensureFrameBuffer() {
+  if (!frameImg || frameImg.width !== W || frameImg.height !== H) {
+    frameImg = offCtx.createImageData(W, H);
+    frameBuf = frameImg.data;
+  }
+}
+
+function render() {
+  ensureFrameBuffer();
+  const theme = themeForLevel(level);
+  const tex = getTexture(theme.name);
+  const floorTex = getFloorTexture(theme.floorName);
+  const buf = frameBuf;
+
+  // ── Sky (top half) — vertical gradient, driven by weather ──────────
+  let skyTopRGB, skyBotRGB;
+  if (weather === 'clear') { skyTopRGB = [42,111,176]; skyBotRGB = [127,184,232]; }
+  else                      { skyTopRGB = [58,63,71];   skyBotRGB = [90,96,104]; }
+
+  const halfH = H / 2;
+  for (let row = 0; row < halfH; row++) {
+    const t = row / halfH;
+    const r = skyTopRGB[0] + (skyBotRGB[0]-skyTopRGB[0])*t;
+    const g = skyTopRGB[1] + (skyBotRGB[1]-skyTopRGB[1])*t;
+    const b = skyTopRGB[2] + (skyBotRGB[2]-skyTopRGB[2])*t;
+    let rowOff = row * W * 4;
+    for (let col = 0; col < W; col++) {
+      buf[rowOff]   = r;
+      buf[rowOff+1] = g;
+      buf[rowOff+2] = b;
+      buf[rowOff+3] = 255;
+      rowOff += 4;
+    }
+  }
+
+  // ── Floor casting (textured, perspective-correct) ──────────────────
+  const dirX = Math.cos(pAngle), dirY = Math.sin(pAngle);
+  const planeLen = Math.tan(HALF_FOV);
+  const planeX = -dirY * planeLen, planeY = dirX * planeLen;
+  const bgR = 8, bgG = 12, bgB = 20;
+  const ftData = floorTex.data;
+
+  for (let row = 0; row < halfH; row++) {
+    const screenRow = row + halfH;
+    const p = screenRow - halfH;
+    if (p <= 0) continue;
+    const rowDist = halfH / p;
+
+    const stepX = rowDist * 2 * planeX / W;
+    const stepY = rowDist * 2 * planeY / W;
+    let floorX = px + rowDist * (dirX - planeX);
+    let floorY = py + rowDist * (dirY - planeY);
+
+    const fog = rowDist / MAX_DEPTH > 1 ? 1 : rowDist / MAX_DEPTH;
+    let rowOff = screenRow * W * 4;
+
+    for (let col = 0; col < W; col++) {
+      const fx = floorX - Math.floor(floorX);
+      const fy = floorY - Math.floor(floorY);
+      const tx = (fx * TEX_SIZE) | 0;
+      const ty = (fy * TEX_SIZE) | 0;
+      const idx = (ty * TEX_SIZE + tx) * 4;
+      buf[rowOff]   = ftData[idx]   + (bgR-ftData[idx])*fog;
+      buf[rowOff+1] = ftData[idx+1] + (bgG-ftData[idx+1])*fog;
+      buf[rowOff+2] = ftData[idx+2] + (bgB-ftData[idx+2])*fog;
+      buf[rowOff+3] = 255;
+      floorX += stepX;
+      floorY += stepY;
+      rowOff += 4;
+    }
+  }
+
+  // ── Walls ────────────────────────────────────────────────────────────
+  const texData = tex.data;
+  const fr = 8, fg = 12, fb = 20;
+  const exitDistByCol = new Float32Array(NUM_RAYS).fill(-1);
+
+  for (let col = 0; col < NUM_RAYS; col++) {
+    const rayAngle = pAngle - HALF_FOV + (col / NUM_RAYS) * FOV;
+    const cosA = Math.cos(rayAngle), sinA = Math.sin(rayAngle);
+
+    let mapX = Math.floor(px), mapY = Math.floor(py);
+    const deltaX = Math.abs(1/cosA), deltaY = Math.abs(1/sinA);
+    const stepXi = cosA < 0 ? -1 : 1, stepYi = sinA < 0 ? -1 : 1;
+    let sideDistX = cosA < 0 ? (px-mapX)*deltaX : (mapX+1-px)*deltaX;
+    let sideDistY = sinA < 0 ? (py-mapY)*deltaY : (mapY+1-py)*deltaY;
+    let side = 0;
+    let exitDist = -1; // distance à laquelle le rayon traverse la case de sortie (arche), -1 si jamais
+
+    for (let i=0; i<MAX_DEPTH*2; i++) {
+      if (sideDistX < sideDistY) { sideDistX+=deltaX; mapX+=stepXi; side=0; }
+      else                        { sideDistY+=deltaY; mapY+=stepYi; side=1; }
+      if (isExit(mapX, mapY) && exitDist < 0) {
+        const d = side===0 ? sideDistX-deltaX : sideDistY-deltaY;
+        exitDist = d * Math.cos(rayAngle - pAngle);
+      }
+      if (isWall(mapX, mapY)) { break; } // la sortie n'est plus un mur : le rayon continue derrière
+    }
+
+    exitDistByCol[col] = exitDist;
+
+    const dist = side===0 ? sideDistX-deltaX : sideDistY-deltaY;
+    const perpDist = dist * Math.cos(rayAngle - pAngle);
+    const wallH = Math.min(H, Math.floor(H / (perpDist + 0.0001)));
+    const wallTop = Math.floor((H - wallH) / 2);
+    const wallBottom = wallTop + wallH;
+
+    let wallX;
+    if (side === 0) wallX = py + perpDist * sinA;
+    else            wallX = px + perpDist * cosA;
+    wallX -= Math.floor(wallX);
+    let texX = (wallX * TEX_SIZE) | 0;
+    if (side===0 && cosA > 0) texX = TEX_SIZE - texX - 1;
+    if (side===1 && sinA < 0) texX = TEX_SIZE - texX - 1;
+    if (texX < 0) texX = 0; if (texX >= TEX_SIZE) texX = TEX_SIZE-1;
+
+    const fog = perpDist / MAX_DEPTH > 1 ? 1 : perpDist / MAX_DEPTH;
+    const shadeFactor = side === 0 ? 1.0 : 0.72;
+
+    const top = wallTop < 0 ? 0 : wallTop;
+    const bottom = wallBottom > H ? H : wallBottom;
+
+    for (let y = top; y < bottom; y++) {
+      const texY = (((y - wallTop) / wallH) * TEX_SIZE) | 0;
+      const idx = (texY * TEX_SIZE + texX) * 4;
+      const tr = texData[idx] * shadeFactor;
+      const tg = texData[idx+1] * shadeFactor;
+      const tb = texData[idx+2] * shadeFactor;
+      const off = (y*W + col) * 4;
+      buf[off]   = tr + (fr-tr)*fog;
+      buf[off+1] = tg + (fg-tg)*fog;
+      buf[off+2] = tb + (fb-tb)*fog;
+      buf[off+3] = 255;
+    }
+  }
+
+  // Pixel buffer → offscreen canvas → stretch vers le canvas principal plein écran
+  offCtx.putImageData(frameImg, 0, 0);
+  ctx.drawImage(offscreen, 0, 0, canvas.width, canvas.height);
+
+  drawExitArch(exitDistByCol);
+
+  // ── Overlay effects (cheap vector draws on top) ─────────────────────
+  if (weather === 'clear') {
+    drawBirds();
+  } else {
+    drawRainBackdrop();
+    drawRainForeground();
+  }
+}
+
+function drawExitArch(exitDistByCol) {
+  // dessine une arche/ligne d'arrivée verte par-dessus le rendu : cadre lumineux,
+  // centre ouvert pour bien montrer que c'est un passage et non un mur plein.
+  let any = false;
+  for (let col = 0; col < NUM_RAYS; col++) { if (exitDistByCol[col] > 0) { any = true; break; } }
+  if (!any) return;
+
+  const t = performance.now() / 1000;
+  const pulse = 0.65 + 0.35 * Math.sin(t * 3);
+
+  for (let col = 0; col < NUM_RAYS; col++) {
+    const d = exitDistByCol[col];
+    if (d <= 0) continue;
+    const archH = Math.min(H, H / (d + 0.0001));
+    const archTop = (H - archH) / 2;
+    const archBottom = archTop + archH;
+    const fog = Math.min(1, d / MAX_DEPTH);
+    if (fog >= 0.97) continue; // trop loin / dans le brouillard, on ne dessine pas le cadre
+
+    const alpha = (1 - fog) * pulse;
+    const frameThickness = Math.max(1, archH * 0.07);
+
+    // bandeau supérieur (linteau de l'arche)
+    ctx.fillStyle = `rgba(34,197,94,${0.55*alpha})`;
+    ctx.fillRect(col, archTop, 1, frameThickness);
+
+    // détection de bord gauche/droit de la case de sortie pour les montants :
+    // on dessine un montant fin sur les colonnes correspondant aux bords de l'arche
+    const isEdgeCol = (col === 0) || (exitDistByCol[col-1] <= 0) ||
+                       (col === NUM_RAYS-1) || (exitDistByCol[col+1] <= 0);
+    if (isEdgeCol) {
+      ctx.fillStyle = `rgba(34,197,94,${0.8*alpha})`;
+      ctx.fillRect(col, archTop, Math.max(1, frameThickness*1.4), archH);
+    }
+  }
+
+  // glow doux au centre pour signaler "c'est par ici"
+  const colsLit = exitDistByCol.reduce((acc, v, i) => v > 0 ? [...acc, i] : acc, []);
+  if (colsLit.length) {
+    const midCol = colsLit[Math.floor(colsLit.length/2)];
+    const d = exitDistByCol[midCol];
+    const archH = Math.min(H, H / (d + 0.0001));
+    const archTop = (H - archH) / 2;
+    const cx = midCol, cy = archTop + archH*0.5;
+    const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, archH*0.8);
+    grd.addColorStop(0, `rgba(34,197,94,${0.25*pulse})`);
+    grd.addColorStop(1, 'rgba(34,197,94,0)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1),16);
+  return [(n>>16)&255,(n>>8)&255,n&255];
+}
+
+
+// ── Minimap ────────────────────────────────────────────────────────────
+function drawMinimap() {
+  const mw = mmCanvas.width, mh = mmCanvas.height;
+  const cs = mw / COLS;
+  mmCtx.fillStyle = 'rgba(8,12,20,0.9)';
+  mmCtx.fillRect(0,0,mw,mh);
+  for (let y=0; y<ROWS; y++) for (let x=0; x<COLS; x++) {
+    if (MAP[y*COLS+x]===0) { mmCtx.fillStyle='#1e2d40'; mmCtx.fillRect(x*cs,y*cs,cs,cs); }
+  }
+  // exit
+  mmCtx.fillStyle='#22c55e';
+  mmCtx.fillRect(exitX*cs, exitY*cs, cs, cs);
+  // player dot
+  mmCtx.fillStyle='#00e5a0';
+  mmCtx.beginPath();
+  mmCtx.arc(px*cs, py*cs, cs*0.7, 0, Math.PI*2);
+  mmCtx.fill();
+  // direction line
+  mmCtx.strokeStyle='#00e5a0';
+  mmCtx.lineWidth=1;
+  mmCtx.beginPath();
+  mmCtx.moveTo(px*cs, py*cs);
+  mmCtx.lineTo((px+Math.cos(pAngle)*1.5)*cs, (py+Math.sin(pAngle)*1.5)*cs);
+  mmCtx.stroke();
+
+  updateCompass();
+}
+
+// Boussole : indique la direction à vol d'oiseau vers la sortie, relative
+// à l'orientation actuelle du joueur. N'indique pas le chemin réel à suivre.
+function updateCompass() {
+  const arrow = document.getElementById('compassArrow');
+  if (!arrow) return;
+  const dx = (exitX + 0.5) - px;
+  const dy = (exitY + 0.5) - py;
+  const angleToExit = Math.atan2(dy, dx);
+  const relative = angleToExit - pAngle;
+  const deg = relative * (180 / Math.PI) + 90; // +90 car la flèche pointe "vers le haut" par défaut
+  arrow.style.transform = `rotate(${deg}deg)`;
+}
+
+// ── Movement ───────────────────────────────────────────────────────────
+let lastBumpTime = 0;
+function bumpWall() {
+  const now = performance.now();
+  if (now - lastBumpTime < 250) return; // évite le spam de flashs en glissant le long d'un mur
+  lastBumpTime = now;
+  const vp = document.getElementById('viewport');
+  vp.classList.remove('bump');
+  // force reflow pour pouvoir rejouer l'animation même si elle vient de tourner
+  void vp.offsetWidth;
+  vp.classList.add('bump');
+  vibrate(15);
+}
+
+function tryMove(nx, ny) {
+  const mx=Math.floor(nx), my=Math.floor(ny);
+  if (mx<0||my<0||mx>=COLS||my>=ROWS) { bumpWall(); return; }
+  if (MAP[my*COLS+mx]===0) { bumpWall(); return; }
+  const prevX=Math.floor(px), prevY=Math.floor(py);
+  px=nx; py=ny;
+  if (Math.floor(px)!==prevX || Math.floor(py)!==prevY) {
+    moves++;
+    document.getElementById('hMoves').textContent=moves;
+    // check exit
+    if (Math.floor(px)===exitX && Math.floor(py)===exitY) winGame();
+  }
+}
+
+function processInput() {
+  if (!running) return;
+  if (keys['ArrowLeft']||keys['q']||keys['Q'])   pAngle -= TURN_SPEED;
+  if (keys['ArrowRight']||keys['e']||keys['E'])  pAngle += TURN_SPEED;
+  if (keys['ArrowUp']||keys['z']||keys['Z']||keys['w']||keys['W']) {
+    tryMove(px + Math.cos(pAngle)*MOVE_SPEED, py + Math.sin(pAngle)*MOVE_SPEED);
+  }
+  if (keys['ArrowDown']||keys['s']||keys['S']) {
+    tryMove(px - Math.cos(pAngle)*MOVE_SPEED, py - Math.sin(pAngle)*MOVE_SPEED);
+  }
+  if (keys['a']||keys['A']) { // strafe left
+    tryMove(px + Math.cos(pAngle-Math.PI/2)*MOVE_SPEED, py + Math.sin(pAngle-Math.PI/2)*MOVE_SPEED);
+  }
+  if (keys['d']||keys['D']) { // strafe right
+    tryMove(px + Math.cos(pAngle+Math.PI/2)*MOVE_SPEED, py + Math.sin(pAngle+Math.PI/2)*MOVE_SPEED);
+  }
+  applyTouchDrag();
+}
+
+// ── Loop ──────────────────────────────────────────────────────────────
+function loop() {
+  if (!running) return;
+  if (!paused) {
+    processInput();
+    render();
+    drawMinimap();
+  }
+  requestAnimationFrame(loop);
+}
+
+// ── Win ────────────────────────────────────────────────────────────────
+// ── Score ─────────────────────────────────────────────────────────────
+const SCORES_KEY = 'mazerun_scores';
+const MAX_SCORES = 10;
+
+function computeScore(lvl, elapsedSec, movesCount) {
+  const cfg = getLevelConfig(lvl);
+  const multi = [1,1,1.5,2.5,4][cfg.phase] || 1;
+  const base = lvl * 1000;
+  const timeBonus = cfg.timeLimit > 0 ? Math.max(0, cfg.timeLimit - elapsedSec) * 10 : 0;
+  const moveBonus = Math.max(0, 300 - movesCount) * 5;
+  return Math.round((base + timeBonus + moveBonus) * multi);
+}
+
+function saveScore(entry) {
+  try {
+    let scores = JSON.parse(localStorage.getItem(SCORES_KEY) || '[]');
+    scores.push(entry);
+    scores.sort((a,b) => b.score - a.score);
+    localStorage.setItem(SCORES_KEY, JSON.stringify(scores.slice(0, MAX_SCORES)));
+  } catch(e) {}
+}
+
+function shareScore(score, lvl) {
+  const text = `🏆 Maze Run — Niveau ${lvl} | Score : ${score.toLocaleString()} pts\nPeux-tu faire mieux ? 🎮`;
+  if (navigator.share) navigator.share({ title:'Maze Run', text }).catch(()=>{});
+  else navigator.clipboard?.writeText(text).then(() => alert('Score copié !')).catch(() => alert(text));
+}
+
+function winGame() {
+  running = false;
+  clearInterval(timerInterval);
+  vibrate([20, 40, 20, 40, 60]);
+  document.getElementById('viewport').classList.remove('timeWarn');
+  document.getElementById('viewport').classList.add('win');
+
+  const score = computeScore(level, elapsed, moves);
+  saveScore({ score, level, phase: currentLevelConfig.phase, elapsed, moves, date: new Date().toLocaleDateString('fr-FR') });
+
+  const m=Math.floor(elapsed/60), s=String(elapsed%60).padStart(2,'0');
+  const nextCfg = getLevelConfig(level+1);
+  const ov = document.getElementById('overlay');
+
+  let milestone = '';
+  if (level === 10) milestone = `<p style="color:#ffb627;font-size:0.7rem">⚠️ La carte disparaît à partir du niveau 11 !</p>`;
+  else if (level === 20) milestone = `<p style="color:#ff5050;font-size:0.7rem">💀 Les murs vont commencer à bouger !</p>`;
+  else if (level === 30) milestone = `<p style="color:#ff00ff;font-size:0.7rem">☠ MODE CAUCHEMAR débloqué !</p>`;
+
+  ov.innerHTML = `
+    <h2>SORTIE !</h2>
+    <div style="background:rgba(0,245,168,0.08);border:1px solid rgba(0,245,168,0.2);border-radius:10px;padding:12px 20px;text-align:center;min-width:200px">
+      <div style="font-size:1.6rem;font-weight:700;color:#00f5a8;font-family:'Creepster',cursive">${score.toLocaleString()}</div>
+      <div style="font-size:0.6rem;color:#8a93c4;letter-spacing:0.1em">POINTS</div>
+      <div style="font-size:0.7rem;color:#c8d8e8;margin-top:4px">Niv. <b>${level}</b> · ${m}:${s} · ${moves} pas</div>
+      <div style="font-size:0.65rem;color:${currentLevelConfig.color};margin-top:2px">${currentLevelConfig.label}</div>
+    </div>
+    ${milestone}
+    <p style="font-size:0.62rem;color:#8a93c4">Suivant : Niv.${level+1} <span style="color:${nextCfg.color}">${nextCfg.label}</span> (${nextCfg.cols}×${nextCfg.cols})</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+      <button class="btn" id="nextBtn">Niveau suivant</button>
+      <button class="btn" id="shareBtn" style="padding:10px 14px;border-color:var(--accent3);color:var(--accent3)">📤</button>
+    </div>
+  `;
+  ov.style.display = 'flex';
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('minimap-wrap').style.display = 'none';
+  document.getElementById('nextBtn').onclick = (e) => {
+    const b = e.currentTarget; b.textContent = 'Génération…'; b.style.pointerEvents = 'none';
+    requestAnimationFrame(() => setTimeout(() => { level++; saveProgress(); init(true); }, 20));
+  };
+  document.getElementById('shareBtn').onclick = () => shareScore(score, level);
+}
+
+function timeOutGame() {
+  running = false;
+  clearInterval(timerInterval);
+  vibrate([100, 50, 100]);
+  document.getElementById('viewport').classList.remove('timeWarn');
+  document.getElementById('viewport').classList.add('timeout');
+  const ov = document.getElementById('overlay');
+  ov.innerHTML = `
+    <h2 style="color:#ff5050;text-shadow:0 0 24px rgba(255,80,80,0.6)">GAME OVER</h2>
+    <p>Temps écoulé ! Vous étiez bloqué au niveau <b>${level}</b><br>après <b>${moves}</b> pas.</p>
+    <button class="btn" id="retryBtn">Recommencer ce niveau</button>
+  `;
+  ov.style.display = 'flex';
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('dpad').style.display = 'none';
+  document.getElementById('minimap-wrap').style.display = 'none';
+  document.getElementById('retryBtn').onclick = (e) => {
+    const b = e.currentTarget;
+    b.textContent = 'Génération…';
+    b.style.pointerEvents = 'none';
+    requestAnimationFrame(() => setTimeout(() => init(true), 20));
+  };
+}
+
+// ── Keyboard ──────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+});
+document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+// ── D-pad touch/click ─────────────────────────────────────────────────
+const actionMap = {
+  fwd:     () => tryMove(px+Math.cos(pAngle)*MOVE_SPEED, py+Math.sin(pAngle)*MOVE_SPEED),
+  back:    () => tryMove(px-Math.cos(pAngle)*MOVE_SPEED, py-Math.sin(pAngle)*MOVE_SPEED),
+  strafeL: () => tryMove(px+Math.cos(pAngle-Math.PI/2)*MOVE_SPEED, py+Math.sin(pAngle-Math.PI/2)*MOVE_SPEED),
+  strafeR: () => tryMove(px+Math.cos(pAngle+Math.PI/2)*MOVE_SPEED, py+Math.sin(pAngle+Math.PI/2)*MOVE_SPEED),
+  turnL:   () => { pAngle -= TURN_SPEED * 2; },
+  turnR:   () => { pAngle += TURN_SPEED * 2; },
+};
+
+// Retour haptique léger (Android uniquement ; iOS Safari ignore silencieusement)
+function vibrate(ms) {
+  try { if (navigator.vibrate) navigator.vibrate(ms); } catch(e) {}
+}
+
+// Hold repeat for d-pad — utilise les événements touch natifs en plus des
+// pointer events pour une fiabilité maximale sur iOS Safari.
+const held = {};
+document.querySelectorAll('.dkey').forEach(btn => {
+  const action = btn.dataset.action;
+  const fire = () => { if (running) actionMap[action]?.(); };
+
+  const start = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    btn.classList.add('pressed');
+    vibrate(8);
+    fire();
+    clearInterval(held[action]);
+    held[action] = setInterval(fire, 80);
+  };
+  const stop = (e) => {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    btn.classList.remove('pressed');
+    clearInterval(held[action]);
+  };
+
+  // Touch events (prioritaires sur iOS Safari)
+  btn.addEventListener('touchstart', start, { passive: false });
+  btn.addEventListener('touchend', stop, { passive: false });
+  btn.addEventListener('touchcancel', stop, { passive: false });
+
+  // Pointer/mouse events (desktop et navigateurs sans support touch)
+  btn.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'touch') return; // déjà géré par touchstart
+    start(e);
+  });
+  btn.addEventListener('pointerup', e => { if (e.pointerType !== 'touch') stop(e); });
+  btn.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') stop(e); });
+  btn.addEventListener('pointercancel', e => { if (e.pointerType !== 'touch') stop(e); });
+
+  // Empêche le double-déclenchement via l'événement click fantôme d'iOS
+  btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
+});
+
+// ── Touch drag on viewport — contrôle continu façon joystick virtuel ───
+// Glisser le doigt vers le haut/bas fait avancer/reculer en continu.
+// Glisser horizontalement fait tourner la vue en continu (proportionnel au glissement).
+// Ignoré si le toucher démarre sur un bouton (D-pad, boutons UI, mini-carte).
+let dragActive = false;
+let dragStartX = 0, dragStartY = 0;
+let dragDX = 0, dragDY = 0;
+const vp = document.getElementById('viewport');
+
+function isOnControl(target) {
+  return target.closest('#dpad') || target.closest('.btn') ||
+         target.closest('#minimap-wrap') || target.closest('#pauseOverlay') ||
+         target.closest('#overlay');
+}
+
+vp.addEventListener('touchstart', e => {
+  if (!running || paused || isOnControl(e.target)) { dragActive = false; return; }
+  const t = e.touches[0];
+  dragActive = true;
+  dragStartX = t.clientX;
+  dragStartY = t.clientY;
+  dragDX = 0; dragDY = 0;
+}, { passive: true });
+
+vp.addEventListener('touchmove', e => {
+  if (!dragActive) return;
+  const t = e.touches[0];
+  dragDX = t.clientX - dragStartX;
+  dragDY = t.clientY - dragStartY;
+}, { passive: true });
+
+vp.addEventListener('touchend', () => {
+  dragActive = false;
+  dragDX = 0; dragDY = 0;
+}, { passive: true });
+
+vp.addEventListener('touchcancel', () => {
+  dragActive = false;
+  dragDX = 0; dragDY = 0;
+}, { passive: true });
+
+// Appliqué à chaque frame dans processInput() via cette fonction
+const DRAG_DEAD_ZONE = 12;   // px avant que le glissement ne déclenche un mouvement
+const DRAG_TURN_MAX  = 90;   // px de glissement horizontal pour la vitesse de rotation max
+const DRAG_MOVE_MAX  = 70;   // px de glissement vertical pour la vitesse d'avance max
+
+function applyTouchDrag() {
+  if (!dragActive) return;
+  if (Math.abs(dragDX) > DRAG_DEAD_ZONE) {
+    const t = Math.max(-1, Math.min(1, dragDX / DRAG_TURN_MAX));
+    pAngle += t * TURN_SPEED * 1.6;
+  }
+  if (Math.abs(dragDY) > DRAG_DEAD_ZONE) {
+    const m = Math.max(-1, Math.min(1, -dragDY / DRAG_MOVE_MAX));
+    tryMove(px + Math.cos(pAngle)*MOVE_SPEED*m, py + Math.sin(pAngle)*MOVE_SPEED*m);
+  }
+}
+
+// ── Buttons ───────────────────────────────────────────────────────────
+function startGameWithLoading(forceLevel) {
+  const startBtn = document.getElementById('startBtn');
+  const original = startBtn.textContent;
+  startBtn.textContent = 'Génération du labyrinthe…';
+  startBtn.disabled = true;
+  startBtn.style.opacity = '0.6';
+  startBtn.style.pointerEvents = 'none';
+  // on laisse le navigateur peindre l'état de chargement avant le travail lourd (buildMaze)
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      init(false, forceLevel);
+      startBtn.textContent = original;
+      startBtn.disabled = false;
+      startBtn.style.opacity = '';
+      startBtn.style.pointerEvents = '';
+    }, 30);
+  });
+}
+
+document.getElementById('startBtn').onclick = () => startGameWithLoading(loadProgress());
+
+// Confirmation en deux temps pour l'action destructive "Recommencer à zéro"
+let resetConfirmTimeout = null;
+document.getElementById('resetProgressBtn').onclick = (e) => {
+  const btn = e.currentTarget;
+  if (btn.dataset.confirming === '1') {
+    clearTimeout(resetConfirmTimeout);
+    btn.dataset.confirming = '0';
+    clearProgress();
+    updateIntroResumeUI();
+  } else {
+    btn.dataset.confirming = '1';
+    btn.textContent = 'Confirmer ? (toute la progression sera perdue)';
+    btn.style.color = '#ff5050';
+    btn.style.borderColor = '#ff5050';
+    resetConfirmTimeout = setTimeout(() => {
+      btn.dataset.confirming = '0';
+      btn.textContent = 'Recommencer à zéro';
+      btn.style.color = '';
+      btn.style.borderColor = '';
+    }, 3000);
+  }
+};
+
+// ── Resume UI on page load ──────────────────────────────────────────
+function updateIntroResumeUI() {
+  const saved = loadProgress();
+  const startBtn = document.getElementById('startBtn');
+  const resetBtn = document.getElementById('resetProgressBtn');
+  const introText = document.getElementById('introText');
+  const helpBtn = document.getElementById('helpToggleBtn');
+  if (saved > 1) {
+    startBtn.textContent = `Reprendre au niveau ${saved}`;
+    resetBtn.style.display = 'inline-block';
+    resetBtn.dataset.confirming = '0';
+    resetBtn.textContent = 'Recommencer à zéro';
+    resetBtn.style.color = '';
+    resetBtn.style.borderColor = '';
+    // joueur déjà expérimenté : on masque les explications par défaut
+    introText.style.display = 'none';
+    helpBtn.style.display = 'inline-block';
+    helpBtn.textContent = '? Comment jouer';
+  } else {
+    startBtn.textContent = 'Entrer dans le labyrinthe';
+    resetBtn.style.display = 'none';
+    introText.style.display = 'block';
+    helpBtn.style.display = 'none';
+  }
+}
+updateIntroResumeUI();
+
+document.getElementById('helpToggleBtn').addEventListener('click', () => {
+  const introText = document.getElementById('introText');
+  const helpBtn = document.getElementById('helpToggleBtn');
+  const showing = introText.style.display !== 'none';
+  introText.style.display = showing ? 'none' : 'block';
+  helpBtn.textContent = showing ? '? Comment jouer' : '✕ Masquer';
+});
+
+// ── Minimap toggle ────────────────────────────────────────────────────
+const mmToggleBtn = document.getElementById('minimap-toggle');
+let mmVisible = true;
+mmToggleBtn.addEventListener('click', () => {
+  mmVisible = !mmVisible;
+  document.getElementById('minimap').classList.toggle('hidden', !mmVisible);
+  mmToggleBtn.textContent = mmVisible ? 'CARTE ▲' : 'CARTE ▼';
+});
+
+// ── Pause ─────────────────────────────────────────────────────────────
+let pauseStartedAt = 0;
+
+function openPause() {
+  if (!running || paused) return;
+  paused = true;
+  pauseStartedAt = Date.now();
+  Object.values(held).forEach(h => clearInterval(h)); // stoppe la répétition des touches D-pad
+  document.getElementById('pauseOverlay').style.display = 'flex';
+}
+
+function closePause() {
+  if (!paused) return;
+  // compense le temps passé en pause pour ne pas pénaliser le joueur sur la limite de temps
+  const pausedDuration = Date.now() - pauseStartedAt;
+  timerStart += pausedDuration;
+  paused = false;
+  document.getElementById('pauseOverlay').style.display = 'none';
+}
+
+document.getElementById('pauseBtn').addEventListener('click', openPause);
+document.getElementById('resumeBtn').addEventListener('click', closePause);
+document.getElementById('quitToMenuBtn').addEventListener('click', () => {
+  closePause();
+  running = false;
+  clearInterval(timerInterval);
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('dpad').style.display = 'none';
+  document.getElementById('minimap-wrap').style.display = 'none';
+  document.getElementById('overlay').style.display = 'flex';
+  updateIntroResumeUI();
+  renderMenuMazeBg();
+});
+
+// Touche Échap pour mettre en pause/reprendre au clavier
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && running) {
+    if (paused) closePause(); else openPause();
+  }
+});
+
+// Initial render placeholder
+ctx.fillStyle='#080c14'; ctx.fillRect(0,0,W,H);
+
+// ── Menu background: top-down hedge maze, inspired by reference photo ──
+let bushPatternCanvas = null;
+function getBushPatternCanvas() {
+  if (bushPatternCanvas) return bushPatternCanvas;
+  const data = getTexture('buissons');
+  const c = document.createElement('canvas');
+  c.width = TEX_SIZE; c.height = TEX_SIZE;
+  c.getContext('2d').putImageData(data, 0, 0);
+  bushPatternCanvas = c;
+  return c;
+}
+
+function renderMenuMazeBg() {
+  const canvas = document.getElementById('menuMazeBg');
+  if (!canvas) return;
+  const wrap = canvas.parentElement;
+  const cssW = wrap.clientWidth || 600;
+  const cssH = wrap.clientHeight || 400;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = cssW * dpr;
+  canvas.height = cssH * dpr;
+  const mctx = canvas.getContext('2d');
+  mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  // small fixed maze for the background, independent of game state
+  const bgCols = 15, bgRows = 11;
+  const bgGrid = buildMaze(bgCols, bgRows);
+
+  const cell = Math.min(cssW / bgCols, cssH / bgRows);
+  const offX = (cssW - cell * bgCols) / 2;
+  const offY = (cssH - cell * bgRows) / 2;
+
+  // pale background like the reference image's white backdrop
+  mctx.fillStyle = '#eef2ea';
+  mctx.fillRect(0, 0, cssW, cssH);
+
+  for (let y = 0; y < bgRows; y++) {
+    for (let x = 0; x < bgCols; x++) {
+      if (bgGrid[y*bgCols+x] === 0) {
+        const px0 = offX + x*cell, py0 = offY + y*cell;
+        mctx.save();
+        mctx.beginPath();
+        mctx.rect(px0, py0, cell+0.5, cell+0.5);
+        mctx.clip();
+        const pattern = getBushPatternCanvas();
+        mctx.drawImage(pattern, px0, py0, cell+0.5, cell+0.5);
+        mctx.restore();
+      }
+    }
+  }
+
+  // subtle vignette to blend edges into the dark overlay gradient
+  const vg = mctx.createRadialGradient(cssW/2, cssH/2, cssH*0.2, cssW/2, cssH/2, cssH*0.75);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.25)');
+  mctx.fillStyle = vg;
+  mctx.fillRect(0,0,cssW,cssH);
+}
+
+renderMenuMazeBg();
+window.addEventListener('resize', () => {
+  if (document.getElementById('overlay').style.display !== 'none') renderMenuMazeBg();
+});
+
+// ── Service Worker PWA ────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(e => console.warn('SW:', e));
+  });
+}
+
+// ── AdMob ─────────────────────────────────────────────────────────────
+const ADMOB = {
+  android: {
+    appId:        'ca-app-pub-2215412532279049~9276659138',
+    interstitial: 'ca-app-pub-2215412532279049/9206175244',
+    rewarded:     'ca-app-pub-2215412532279049/8276236954',
+  },
+  test: {
+    interstitial: 'ca-app-pub-3940256099942544/1033173712',
+    rewarded:     'ca-app-pub-3940256099942544/5224354917',
+  },
+};
+
+const ADS_KEY = 'mazerun_no_ads';
+function hasRemovedAds() { try { return localStorage.getItem(ADS_KEY)==='1'; } catch(e){ return false; } }
+
+function showInterstitialAd(onClose) {
+  if (hasRemovedAds()) { onClose(); return; }
+  const adEl = document.getElementById('adOverlay');
+  const adCounter = document.getElementById('adCounter');
+  const adClose = document.getElementById('adClose');
+  const adCountdown = document.getElementById('adCountdown');
+  if (!adEl) { onClose(); return; }
+  adEl.style.display = 'flex';
+  adClose.style.display = 'none';
+  adCountdown.style.display = 'flex';
+  let t = 5;
+  adCounter.textContent = t;
+  const tick = setInterval(() => {
+    t--;
+    adCounter.textContent = t;
+    if (t <= 0) {
+      clearInterval(tick);
+      adClose.style.display = 'flex';
+      adCountdown.style.display = 'none';
+    }
+  }, 1000);
+  adClose.onclick = () => {
+    adEl.style.display = 'none';
+    clearInterval(tick);
+    onClose();
+  };
+}
+
+</script>
+
+<!-- Overlay pub -->
+<div id="adOverlay" style="
+  display:none;position:fixed;inset:0;z-index:9999;
+  background:rgba(8,10,18,0.97);
+  flex-direction:column;align-items:center;justify-content:center;
+  gap:20px;font-family:'Chakra Petch',sans-serif;
+">
+  <div style="
+    width:300px;max-width:90vw;height:180px;
+    background:linear-gradient(135deg,#1a1f3a,#221b3f);
+    border:1px solid #3a3f6e;border-radius:10px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:12px;color:#8a93c4;font-size:0.8rem;
+  ">
+    <div style="font-size:2rem">📢</div>
+    <div style="text-align:center;line-height:1.6">
+      Publicité<br>
+      <span style="font-size:0.6rem;opacity:0.6">(AdMob actif sur l'app publiée)</span>
+    </div>
+    <button onclick="try{localStorage.setItem('mazerun_no_ads','1')}catch(e){}document.getElementById('adOverlay').style.display='none';alert('✓ Pubs supprimées !');" style="
+      background:transparent;border:1px solid #00f5a8;color:#00f5a8;
+      font-family:'Chakra Petch',sans-serif;font-size:0.65rem;font-weight:600;
+      padding:5px 12px;border-radius:4px;cursor:pointer;
+    ">🚫 Supprimer les pubs — 2,99 €</button>
+  </div>
+  <div id="adCountdown" style="
+    width:36px;height:36px;border-radius:50%;
+    background:rgba(255,255,255,0.08);border:1px solid #3a3f6e;
+    display:flex;align-items:center;justify-content:center;
+    font-size:0.85rem;color:#8a93c4;
+  "><span id="adCounter">5</span></div>
+  <button id="adClose" style="
+    display:none;width:40px;height:40px;border-radius:50%;
+    background:rgba(0,245,168,0.15);border:1px solid #00f5a8;color:#00f5a8;
+    font-size:1.2rem;cursor:pointer;align-items:center;justify-content:center;
+    touch-action:manipulation;
+  ">✕</button>
+</div>
+
+</body>
+</html>
