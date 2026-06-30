@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body { margin:0; background:#000; color:#0f0; font:14px monospace; }
+  #log { padding:10px; white-space:pre-wrap; }
+  #c { display:block; background:#222; border:2px solid red; }
+</style>
+</head>
+<body>
+<div id="log"></div>
+<canvas id="c" width="200" height="100"></canvas>
+
+<script>
+const log = document.getElementById('log');
+function L(msg) { log.textContent += msg + '\n'; }
+
+L('1. Script démarré');
+L('2. window.innerWidth = ' + window.innerWidth);
+L('3. window.innerHeight = ' + window.innerHeight);
+L('4. devicePixelRatio = ' + window.devicePixelRatio);
+
+const c = document.getElementById('c');
+L('5. Canvas trouvé: ' + (c ? 'OUI' : 'NON'));
+L('6. canvas.width avant = ' + c.width);
+L('7. canvas.height avant = ' + c.height);
+
+const ctx = c.getContext('2d');
+L('8. getContext 2d: ' + (ctx ? 'OK' : 'NULL'));
+
+try {
+  ctx.fillStyle = 'lime';
+  ctx.fillRect(10, 10, 50, 50);
+  L('9. fillRect lime: OK (devrait être visible)');
+} catch(e) {
+  L('9. ERREUR fillRect: ' + e.message);
+}
+
+try {
+  const imgData = ctx.createImageData(50, 50);
+  L('10. createImageData: OK, taille=' + imgData.data.length);
+  for (let i = 0; i < imgData.data.length; i += 4) {
+    imgData.data[i] = 255;   // R
+    imgData.data[i+1] = 0;   // G
+    imgData.data[i+2] = 255; // B
+    imgData.data[i+3] = 255; // A
+  }
+  ctx.putImageData(imgData, 80, 10);
+  L('11. putImageData magenta: OK (devrait être visible)');
+} catch(e) {
+  L('11. ERREUR putImageData: ' + e.message);
+}
+
+try {
+  const off = document.createElement('canvas');
+  off.width = 30; off.height = 30;
+  const offCtx = off.getContext('2d');
+  offCtx.fillStyle = 'yellow';
+  offCtx.fillRect(0,0,30,30);
+  ctx.drawImage(off, 140, 10, 50, 50);
+  L('12. drawImage offscreen->main: OK (devrait être visible jaune agrandi)');
+} catch(e) {
+  L('12. ERREUR drawImage: ' + e.message);
+}
+
+L('13. User Agent: ' + navigator.userAgent.substring(0, 80));
+L('14. URL: ' + location.href);
+L('15. Protocol: ' + location.protocol);
+
+L('--- FIN DES TESTS ---');
+L('Tu devrais voir 3 carrés colorés sous ce texte:');
+L('VERT (fillRect) | MAGENTA (putImageData) | JAUNE (drawImage)');
+</script>
+</body>
+</html>
