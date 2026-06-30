@@ -528,6 +528,14 @@
 </div>
 
 <script>
+// ── DEBUG : affiche toute erreur JS directement à l'écran ──────────────
+window.addEventListener('error', function(e) {
+  const div = document.createElement('div');
+  div.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#200;color:#f55;font:12px monospace;padding:16px;overflow:auto;white-space:pre-wrap;';
+  div.textContent = '❌ ERREUR JS:\n' + e.message + '\n\nFichier: ' + e.filename + '\nLigne: ' + e.lineno + ':' + e.colno + '\n\nStack:\n' + (e.error && e.error.stack || 'non disponible');
+  document.body.appendChild(div);
+});
+
 // ── Constants ─────────────────────────────────────────────────────────
 const W = 320, H = 180; // internal render resolution (upscaled by CSS)
 const FOV = Math.PI / 3;  // 60°
