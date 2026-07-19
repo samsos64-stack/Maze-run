@@ -4581,8 +4581,11 @@ function render() {
       : tex.data;
 
     let texX = (wallX * TEX_SIZE) | 0;
-    if (side===0 && cosA > 0) texX = TEX_SIZE - texX - 1;
-    if (side===1 && sinA < 0) texX = TEX_SIZE - texX - 1;
+    // Sens de lecture des textures : inversé par rapport à la convention
+    // classique car notre repère d'angles diffère — sinon les graffitis
+    // s'affichent en miroir (« ƎZ∀W » au lieu de « MAZE »)
+    if (side===0 && cosA < 0) texX = TEX_SIZE - texX - 1;
+    if (side===1 && sinA > 0) texX = TEX_SIZE - texX - 1;
     if (texX < 0) texX = 0; if (texX >= TEX_SIZE) texX = TEX_SIZE-1;
 
     const fog = fogCurve(perpDist / MAX_DEPTH);
