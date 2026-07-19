@@ -761,6 +761,14 @@ const safeStore = (() => {
   }
 })();
 
+// ── Outil de test : ajouter ?tuto=1 à l'adresse rejoue le didacticiel
+// (les messages « déjà vus » sont oubliés, la progression reste intacte) ──
+try {
+  if (location.search.includes('tuto=1')) {
+    safeStore.removeItem('mazerun_tutorial_seen');
+  }
+} catch (e) {}
+
 let MAX_DEPTH = 20;
 // Brouillard non linéaire : net de près, fondu progressif au loin (moins « arcade »)
 function fogCurve(t) { return t >= 1 ? 1 : t * t * (3 - 2 * t); }
@@ -3793,7 +3801,7 @@ function initAudio() {
 
     // Bus musique — volume bas, la musique doit rester discrète
     musicGain = audioCtx.createGain();
-    musicGain.gain.value = musicEnabled ? 0.11 : 0;
+    musicGain.gain.value = musicEnabled ? 0.17 : 0;
     musicGain.connect(masterGain);
   } catch(e) { return null; }
   return audioCtx;
@@ -3816,7 +3824,7 @@ function setMusicEnabled(on) {
   musicEnabled = on;
   try { safeStore.setItem(MUSIC_KEY, on ? '1' : '0'); } catch(e) {}
   initAudio();
-  if (musicGain) musicGain.gain.setTargetAtTime(on ? 0.11 : 0, audioCtx.currentTime, 0.4);
+  if (musicGain) musicGain.gain.setTargetAtTime(on ? 0.17 : 0, audioCtx.currentTime, 0.4);
   if (on) { resumeAudio(); startMusic(); }
   else stopMusic();
 }
@@ -3890,11 +3898,25 @@ function sfxBump() {
   osc.frequency.exponentialRampToValueAtTime(55, now + 0.09);
 
   const g = ctxA.createGain();
-  g.gain.setValueAtTime(0.22, now);
-  g.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+  g.gain.setValueAtTime(0.4, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
 
   osc.connect(g); g.connect(sfxGain);
-  osc.start(now); osc.stop(now + 0.13);
+  osc.start(now); osc.stop(now + 0.15);
+
+  // Claquement sec par-dessus le thud : le « toc » du bois qu'on percute
+  const nb = getNoiseBuffer();
+  if (nb) {
+    const n = ctxA.createBufferSource();
+    n.buffer = nb;
+    const nf = ctxA.createBiquadFilter();
+    nf.type = 'bandpass'; nf.frequency.value = 900; nf.Q.value = 1.2;
+    const ng = ctxA.createGain();
+    ng.gain.setValueAtTime(0.3, now);
+    ng.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+    n.connect(nf); nf.connect(ng); ng.connect(sfxGain);
+    n.start(now); n.stop(now + 0.08);
+  }
 }
 
 // ── VICTOIRE — petite fanfare montante ──
@@ -4038,7 +4060,7 @@ function startAmbient() {
 
   const g = ctxA.createGain();
   g.gain.value = 0;
-  g.gain.setTargetAtTime(isCity ? 0.045 : 0.06, ctxA.currentTime, 1.2);
+  g.gain.setTargetAtTime(isCity ? 0.035 : 0.042, ctxA.currentTime, 1.2);   // vent discret
 
   // LFO : le vent monte et descend naturellement
   const lfo = ctxA.createOscillator();
@@ -4066,7 +4088,7 @@ function startAmbient() {
 
     const rg = ctxA.createGain();
     rg.gain.value = 0;
-    rg.gain.setTargetAtTime(0.075, ctxA.currentTime, 0.8);
+    rg.gain.setTargetAtTime(0.032, ctxA.currentTime, 0.8);   // pluie en fond, sous la musique
 
     rsrc.connect(rfilt); rfilt.connect(rg); rg.connect(sfxGain);
     rsrc.start();
@@ -4138,12 +4160,16 @@ function startMusic() {
     musicNodes.push(osc, lfo);
   });
 
-  // ── SÉQUENCEUR ENJOUÉ : basse groovy + pulsation + mélodie chantante ──
+  // ── SÉQUENCEUR POP : couplet/refrain qui se répètent, kick et claps ──
   musicStep = 0;
-  const stepMs = Math.round(60000 / (scale.bpm || 112) / 2);   // double-croche de groove
-  const BASS_PATTERN = [0, null, 7, null, 0, null, 9, 7];      // ligne de basse sautillante
+  const stepMs = Math.round(60000 / (scale.bpm || 112) / 2);   // double-croche
 
-  // Petite note percussive (pluck) réutilisable
+  // Motifs sur 16 pas (indices dans la gamme, null = silence)
+  // → une mélodie ÉCRITE qui revient en boucle : c'est ça qui rend « pop »
+  const HOOK_A = [0, null, 2, 3,  4, null, 3, 2,  0, null, 2, 4,  3, 2, 1, null];  // couplet
+  const HOOK_B = [4, null, 4, 3,  5, null, 4, 3,  2, null, 2, 3,  1, null, 0, null]; // refrain
+  const BASS16 = [0, null, null, 0,  7, null, 5, null,  0, null, null, 0,  4, null, 5, null];
+
   function pluck(freq, t, vol, dur, type, cutoff) {
     const o = audioCtx.createOscillator();
     o.type = type; o.frequency.value = freq;
@@ -4159,34 +4185,56 @@ function startMusic() {
     o.start(t); o.stop(t + dur + 0.05);
   }
 
-  let melodyDeg = 0;   // la mélodie se promène par petits pas → chantante
+  // Kick sourd (grosse caisse) et clap (contretemps pop)
+  function kick(t) {
+    const o = audioCtx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(120, t);
+    o.frequency.exponentialRampToValueAtTime(45, t + 0.1);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.5, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    o.connect(g); g.connect(musicGain);
+    o.start(t); o.stop(t + 0.16);
+  }
+  function clap(t) {
+    const nb = getNoiseBuffer(); if (!nb) return;
+    const n = audioCtx.createBufferSource();
+    n.buffer = nb;
+    const f = audioCtx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = 1900; f.Q.value = 0.9;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.22, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+    n.connect(f); f.connect(g); g.connect(musicGain);
+    n.start(t); n.stop(t + 0.13);
+  }
+
+  const degAt = i => scale.steps[Math.min(i, scale.steps.length - 1)];
+
   musicTimer = setInterval(() => {
     if (!musicEnabled || !audioCtx) return;
     const t = audioCtx.currentTime;
-    const st = musicStep % 8;
+    const st = musicStep % 16;
+    const bar = Math.floor(musicStep / 16) % 4;      // 4 mesures : A A B A
+    const hook = bar === 2 ? HOOK_B : HOOK_A;
 
-    // 1) BASSE : le groove qui donne envie d'avancer
-    const bassDeg = BASS_PATTERN[st];
-    if (bassDeg !== null) {
-      pluck(noteFreq(scale.root, bassDeg), t, 0.16, 0.22, 'triangle', 700);
-    }
+    // Batterie pop : kick sur les temps, clap sur 2 et 4
+    if (st % 4 === 0) kick(t);
+    if (st === 4 || st === 12) clap(t);
+    if (st % 2 === 1) pluck(noteFreq(scale.root, 36), t, 0.02, 0.045, 'square', 6000); // tic charley
 
-    // 2) PULSATION : petit « tic » feutré sur les contretemps
-    if (st % 2 === 1) {
-      pluck(noteFreq(scale.root, 24 + 12), t, 0.025, 0.05, 'square', 5200);
-    }
+    // Basse
+    const bd = BASS16[st];
+    if (bd !== null) pluck(noteFreq(scale.root, bd), t, 0.17, 0.2, 'triangle', 750);
 
-    // 3) MÉLODIE : présente (70 %), par pas voisins = mélodieuse, pas aléatoire
-    if (st % 2 === 0 && Math.random() < 0.7) {
-      melodyDeg += (Math.random() < 0.5 ? 1 : -1) * (Math.random() < 0.75 ? 1 : 2);
-      melodyDeg = Math.max(0, Math.min(scale.steps.length - 1, melodyDeg));
-      const deg = scale.steps[melodyDeg];
-      const octave = st === 0 && Math.random() < 0.4 ? 36 : 24;
-      pluck(noteFreq(scale.root, deg + octave), t, 0.085, 0.5, 'sine', 3200);
-      // Tierce d'accompagnement de temps en temps : ça sonne « chanson »
-      if (Math.random() < 0.25) {
-        pluck(noteFreq(scale.root, deg + octave + 4), t + 0.02, 0.045, 0.4, 'sine', 2600);
-      }
+    // Mélodie : le refrain écrit, une octave plus brillante sur la mesure B
+    const hd = hook[st];
+    if (hd !== null) {
+      const oct = bar === 2 ? 36 : 24;
+      pluck(noteFreq(scale.root, degAt(hd) + oct), t, 0.1, 0.42, 'triangle', 3600);
+      // Doublage discret à l'octave : son plus riche, plus « produit »
+      pluck(noteFreq(scale.root, degAt(hd) + oct + 12), t, 0.03, 0.3, 'sine', 4200);
     }
 
     musicStep++;
