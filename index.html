@@ -2,10 +2,13 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#171b26">
+<link rel="apple-touch-icon" href="icon-192.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Corn Maze</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Fredoka:wght@400;500;600;700&display=swap');
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -343,6 +346,14 @@
     pointer-events: none;
   }
 
+  /* CORRECTIF : les écrans injectés directement dans #overlay (victoire,
+     résultats, classement…) passaient SOUS le voile flou ::before (z=1).
+     On place tout enfant direct au-dessus du voile. */
+  #overlay > :not(#menuMazeBg) {
+    position: relative;
+    z-index: 2;
+  }
+
   #overlay-content {
     position: relative;
     z-index: 2;
@@ -354,8 +365,8 @@
   }
 
   #overlay h2 {
-    font-family: 'Bricolage Grotesque', 'Outfit', sans-serif;
-    font-weight: 800;
+    font-family: 'Fredoka', 'Bricolage Grotesque', 'Outfit', sans-serif;
+    font-weight: 700;
     font-size: clamp(1.9rem, 7.5vw, 2.7rem);
     letter-spacing: -0.02em;
     line-height: 1.15;
@@ -381,7 +392,7 @@
     background: rgba(109,189,138,0.10);
     border: 1.5px solid var(--accent);
     color: var(--accent-soft);
-    font-family: 'Outfit', system-ui, sans-serif;
+    font-family: 'Fredoka', 'Outfit', system-ui, sans-serif;
     font-weight: 600;
     font-size: 0.82rem;
     letter-spacing: 0.02em;
@@ -542,6 +553,25 @@
     100% { box-shadow: inset 0 0 0 0 rgba(224,106,106,0); }
   }
   #viewport.bump { animation: bumpflash 0.22s ease-out 1; }
+
+  /* ══ CORRECTIF CRITIQUE : animations désactivées par le système ══
+     Quand « Supprimer les animations » est activé sur le téléphone,
+     les animations d'entrée (opacité 0 → 1) ne se jouent jamais et les
+     éléments restent invisibles. On saute alors directement à l'état
+     final : tout s'affiche instantanément, sans animation. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-delay: 0ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+  html.no-anim *, html.no-anim *::before, html.no-anim *::after {
+    animation: none !important;
+    transition: none !important;
+    opacity: initial;
+  }
 </style>
 </head>
 <body>
@@ -708,6 +738,14 @@ const NUM_RAYS = W;
 // ── Stockage sécurisé : localStorage peut être BLOQUÉ (fichier ouvert en
 // content:// dans Chrome, aperçus sandbox…). Dans ce cas : sauvegarde en
 // mémoire pour la session, et le jeu tourne au lieu de planter.
+// Si le système demande de réduire les animations, on les coupe toutes
+// (sinon les éléments qui « apparaissent en fondu » restent invisibles)
+try {
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.documentElement.classList.add('no-anim');
+  }
+} catch (e) {}
+
 const safeStore = (() => {
   try {
     window.localStorage.setItem('__test__', '1');
@@ -4043,10 +4081,10 @@ let musicStep = 0;
 
 // Gammes par phase : de plus en plus tendues
 const MUSIC_SCALES = {
-  1: { root: 130.81, steps: [0, 2, 4, 7, 9],      name: 'majeur pentatonique' },  // Do — serein
-  2: { root: 130.81, steps: [0, 2, 3, 5, 7, 10],  name: 'mineur dorien' },        // Do — mystérieux
-  3: { root: 123.47, steps: [0, 1, 5, 7, 8],      name: 'phrygien' },             // Si — inquiétant
-  4: { root: 116.54, steps: [0, 1, 4, 6, 7, 10],  name: 'diminué' },              // Sib — oppressant
+  1: { root: 146.83, steps: [0, 2, 4, 7, 9],      bpm: 112, name: 'majeur pentatonique' }, // Ré — joyeux
+  2: { root: 146.83, steps: [0, 2, 4, 5, 7, 9, 10], bpm: 118, name: 'mixolydien' },        // Ré — entraînant
+  3: { root: 138.59, steps: [0, 2, 3, 5, 7, 9, 10], bpm: 124, name: 'dorien' },            // Do# — énergique
+  4: { root: 130.81, steps: [0, 2, 3, 5, 7, 8, 11], bpm: 132, name: 'mineur harmonique' }, // Do — intense
 };
 
 function noteFreq(root, semitones) {
@@ -4079,7 +4117,7 @@ function startMusic() {
 
     const filt = ctxA.createBiquadFilter();
     filt.type = 'lowpass';
-    filt.frequency.value = 480;
+    filt.frequency.value = 900;   // plus ouvert = plus lumineux
     filt.Q.value = 0.7;
 
     const g = ctxA.createGain();
@@ -4100,54 +4138,59 @@ function startMusic() {
     musicNodes.push(osc, lfo);
   });
 
-  // ── MÉLODIE : notes éparses, jamais insistantes ──
+  // ── SÉQUENCEUR ENJOUÉ : basse groovy + pulsation + mélodie chantante ──
   musicStep = 0;
-  const noteInterval = phase >= 3 ? 2400 : 3200;   // plus dense quand ça se corse
+  const stepMs = Math.round(60000 / (scale.bpm || 112) / 2);   // double-croche de groove
+  const BASS_PATTERN = [0, null, 7, null, 0, null, 9, 7];      // ligne de basse sautillante
 
-  musicTimer = setInterval(() => {
-    if (!musicEnabled || !audioCtx) return;
-    // 55% de chances de jouer — les silences font respirer
-    if (Math.random() > 0.55) { musicStep++; return; }
-
-    const t = audioCtx.currentTime;
-    const deg = scale.steps[(Math.random()*scale.steps.length)|0];
-    const octave = Math.random() < 0.65 ? 24 : 36;   // 2 ou 3 octaves au-dessus
-    const f = noteFreq(scale.root, deg + octave);
-
-    const osc = audioCtx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.value = f;
-
+  // Petite note percussive (pluck) réutilisable
+  function pluck(freq, t, vol, dur, type, cutoff) {
+    const o = audioCtx.createOscillator();
+    o.type = type; o.frequency.value = freq;
+    const fl = audioCtx.createBiquadFilter();
+    fl.type = 'lowpass';
+    fl.frequency.setValueAtTime(cutoff, t);
+    fl.frequency.exponentialRampToValueAtTime(Math.max(200, cutoff * 0.25), t + dur);
     const g = audioCtx.createGain();
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.09, t + 0.15);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 2.2);
+    g.gain.linearRampToValueAtTime(vol, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(fl); fl.connect(g); g.connect(musicGain);
+    o.start(t); o.stop(t + dur + 0.05);
+  }
 
-    // Un peu de brillance qui s'estompe
-    const filt = audioCtx.createBiquadFilter();
-    filt.type = 'lowpass';
-    filt.frequency.setValueAtTime(2600, t);
-    filt.frequency.exponentialRampToValueAtTime(700, t + 2);
+  let melodyDeg = 0;   // la mélodie se promène par petits pas → chantante
+  musicTimer = setInterval(() => {
+    if (!musicEnabled || !audioCtx) return;
+    const t = audioCtx.currentTime;
+    const st = musicStep % 8;
 
-    osc.connect(filt); filt.connect(g); g.connect(musicGain);
-    osc.start(t); osc.stop(t + 2.3);
+    // 1) BASSE : le groove qui donne envie d'avancer
+    const bassDeg = BASS_PATTERN[st];
+    if (bassDeg !== null) {
+      pluck(noteFreq(scale.root, bassDeg), t, 0.16, 0.22, 'triangle', 700);
+    }
 
-    // Parfois une tierce en écho, décalée
-    if (Math.random() < 0.3) {
-      const t2 = t + 0.42;
-      const osc2 = audioCtx.createOscillator();
-      osc2.type = 'sine';
-      osc2.frequency.value = noteFreq(scale.root, deg + octave + 4);
-      const g2 = audioCtx.createGain();
-      g2.gain.setValueAtTime(0, t2);
-      g2.gain.linearRampToValueAtTime(0.05, t2 + 0.12);
-      g2.gain.exponentialRampToValueAtTime(0.001, t2 + 1.6);
-      osc2.connect(g2); g2.connect(musicGain);
-      osc2.start(t2); osc2.stop(t2 + 1.7);
+    // 2) PULSATION : petit « tic » feutré sur les contretemps
+    if (st % 2 === 1) {
+      pluck(noteFreq(scale.root, 24 + 12), t, 0.025, 0.05, 'square', 5200);
+    }
+
+    // 3) MÉLODIE : présente (70 %), par pas voisins = mélodieuse, pas aléatoire
+    if (st % 2 === 0 && Math.random() < 0.7) {
+      melodyDeg += (Math.random() < 0.5 ? 1 : -1) * (Math.random() < 0.75 ? 1 : 2);
+      melodyDeg = Math.max(0, Math.min(scale.steps.length - 1, melodyDeg));
+      const deg = scale.steps[melodyDeg];
+      const octave = st === 0 && Math.random() < 0.4 ? 36 : 24;
+      pluck(noteFreq(scale.root, deg + octave), t, 0.085, 0.5, 'sine', 3200);
+      // Tierce d'accompagnement de temps en temps : ça sonne « chanson »
+      if (Math.random() < 0.25) {
+        pluck(noteFreq(scale.root, deg + octave + 4), t + 0.02, 0.045, 0.4, 'sine', 2600);
+      }
     }
 
     musicStep++;
-  }, noteInterval);
+  }, stepMs);
 }
 
 // Démarre l'audio au premier contact (obligatoire sur mobile)
@@ -4571,7 +4614,9 @@ function render() {
 }
 
 function drawExitArch(exitDistByCol) {
-  // Ligne d'arrivée : deux mâts, une banderole FINISH et des drapeaux à damier
+  // ── Ligne d'arrivée EN 3D : chaque mât a sa propre distance et sa propre
+  // taille, la banderole suit la pente de la perspective, et les mâts ont
+  // une épaisseur avec face latérale ombrée. ──
   let any = false;
   let minCol = NUM_RAYS, maxCol = -1, nearest = Infinity;
   for (let col = 0; col < NUM_RAYS; col++) {
@@ -4588,124 +4633,142 @@ function drawExitArch(exitDistByCol) {
   const fog = fogCurve(nearest / MAX_DEPTH);
   if (fog >= 0.97) return;
   const alpha = 1 - fog * 0.85;
-
   const t = performance.now() / 1000;
 
-  // Géométrie de la porte d'arrivée
-  const gateH = Math.min(H * 1.6, H / (nearest + 0.0001));
-  const gateTop = (H - gateH) / 2;
-  const gateBottom = gateTop + gateH;
-  const leftX = minCol;
-  const rightX = maxCol;
+  // Hauteur projetée pour une distance donnée (cœur de la perspective)
+  const hAt = d => Math.min(H * 1.6, H / (d + 0.0001));
+
+  const leftX = minCol, rightX = maxCol;
+  const dL = exitDistByCol[minCol], dR = exitDistByCol[maxCol];
+  const hL = hAt(dL), hR = hAt(dR);
+  const topL = (H - hL) / 2, topR = (H - hR) / 2;
+  const botL = topL + hL,   botR = topR + hR;
+  const lerp = (a, b, k) => a + (b - a) * k;
   const gateW = Math.max(4, rightX - leftX);
-  const poleW = Math.max(1.5, gateW * 0.06);
 
   ctx.save();
   ctx.globalAlpha = alpha;
 
-  // ── Mâts verticaux (blanc/rouge alternés) ──
-  function pole(x) {
-    const segH = Math.max(2, gateH / 10);
-    for (let i = 0, y = gateTop; y < gateBottom; i++, y += segH) {
-      ctx.fillStyle = (i % 2) ? '#e8e8e8' : '#c0392b';
-      ctx.fillRect(x - poleW/2, y, poleW, Math.min(segH, gateBottom - y));
+  // ── Mât 3D : face latérale ombrée (profondeur) + face avant rouge/blanc ──
+  function pole(x, d, dir) {
+    const h = hAt(d);
+    const top = (H - h) / 2, bot = top + h;
+    const pw = Math.max(1.5, h * 0.05);
+
+    // Face latérale : fuit vers l'arrière du mât (léger recul en distance)
+    const h2 = hAt(d + 0.5);
+    const top2 = (H - h2) / 2, bot2 = top2 + h2;
+    const xIn  = x + dir * pw / 2;          // arête intérieure avant
+    const xBk  = xIn + dir * pw * 1.4;      // arête arrière (vers le centre)
+    ctx.fillStyle = '#7c1f16';              // rouge sombre = côté dans l'ombre
+    ctx.beginPath();
+    ctx.moveTo(xIn, top);
+    ctx.lineTo(xBk, top2 + (top - top2) * 0.25);
+    ctx.lineTo(xBk, bot2 + (bot - bot2) * 0.25);
+    ctx.lineTo(xIn, bot);
+    ctx.closePath();
+    ctx.fill();
+
+    // Face avant : segments rouge/blanc
+    const segH = Math.max(2, h / 10);
+    for (let i = 0, y = top; y < bot; i++, y += segH) {
+      ctx.fillStyle = (i % 2) ? '#ececec' : '#c0392b';
+      ctx.fillRect(x - pw / 2, y, pw, Math.min(segH, bot - y));
     }
-    // Contour
     ctx.strokeStyle = 'rgba(0,0,0,0.5)';
     ctx.lineWidth = 0.7;
-    ctx.strokeRect(x - poleW/2, gateTop, poleW, gateH);
+    ctx.strokeRect(x - pw / 2, top, pw, h);
+    return { top, bot, h, pw };
   }
-  pole(leftX);
-  pole(rightX);
+  const PL = pole(leftX, dL, +1);    // la face latérale part vers le centre
+  const PR = pole(rightX, dR, -1);
 
-  // ── Banderole horizontale en haut ──
-  const bannerH = Math.max(3, gateH * 0.13);
-  const bannerY = gateTop;
-  // Légère ondulation de la banderole
-  const wave = Math.sin(t * 2) * bannerH * 0.08;
+  // ── Banderole : un quadrilatère qui suit la pente de la perspective ──
+  const bhL = Math.max(3, hL * 0.13);
+  const bhR = Math.max(3, hR * 0.13);
+  const wave = Math.sin(t * 2) * Math.min(bhL, bhR) * 0.08;
+  const midX = (leftX + rightX) / 2;
 
   ctx.beginPath();
-  ctx.moveTo(leftX, bannerY);
-  ctx.quadraticCurveTo((leftX+rightX)/2, bannerY + wave, rightX, bannerY);
-  ctx.lineTo(rightX, bannerY + bannerH);
-  ctx.quadraticCurveTo((leftX+rightX)/2, bannerY + bannerH + wave, leftX, bannerY + bannerH);
+  ctx.moveTo(leftX, topL);
+  ctx.quadraticCurveTo(midX, lerp(topL, topR, 0.5) + wave, rightX, topR);
+  ctx.lineTo(rightX, topR + bhR);
+  ctx.quadraticCurveTo(midX, lerp(topL + bhL, topR + bhR, 0.5) + wave, leftX, topL + bhL);
   ctx.closePath();
   ctx.fillStyle = '#1a1a1a';
   ctx.fill();
   ctx.strokeStyle = '#e8e8e8';
-  ctx.lineWidth = Math.max(0.5, bannerH * 0.08);
+  ctx.lineWidth = Math.max(0.5, Math.min(bhL, bhR) * 0.08);
   ctx.stroke();
 
-  // Texte FINISH sur la banderole
-  if (bannerH > 6) {
+  // Texte FINISH incliné selon la perspective de la banderole
+  const bhMid = (bhL + bhR) / 2;
+  if (bhMid > 6) {
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(leftX, bannerY, gateW, bannerH);
-    ctx.clip();
+    ctx.clip();   // le chemin de la banderole sert de masque
+    const angle = Math.atan2((topR + bhR / 2) - (topL + bhL / 2), rightX - leftX);
+    ctx.translate(midX, lerp(topL + bhL / 2, topR + bhR / 2, 0.5) + wave * 0.5);
+    ctx.rotate(angle);
     ctx.fillStyle = '#f5d020';
-    const fs = bannerH * 0.72;
-    ctx.font = `800 ${fs}px 'Bricolage Grotesque', 'Outfit', sans-serif`;
+    ctx.font = `800 ${bhMid * 0.72}px 'Fredoka', 'Outfit', sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('FINISH', (leftX+rightX)/2, bannerY + bannerH/2 + wave*0.5);
+    ctx.fillText('FINISH', 0, 0);
     ctx.restore();
   }
 
-  // ── Damier sur la bordure basse de la banderole ──
+  // ── Damier sous la banderole, le long de la pente ──
   const checkS = Math.max(1.5, gateW / 14);
   for (let i = 0, x = leftX; x < rightX; i++, x += checkS) {
+    const k = (x - leftX) / gateW;
     ctx.fillStyle = (i % 2) ? '#ffffff' : '#111111';
-    ctx.fillRect(x, bannerY + bannerH, Math.min(checkS, rightX - x), checkS * 0.5);
+    ctx.fillRect(x, lerp(topL + bhL, topR + bhR, k) + wave * (0.5 - Math.abs(k - 0.5)),
+                 Math.min(checkS, rightX - x), lerp(bhL, bhR, k) * 0.38);
   }
 
-  // ── Drapeaux à damier au sommet des mâts (agités par le vent) ──
-  function flag(x, dir) {
-    const fw = gateW * 0.22;
-    const fh = gateH * 0.09;
+  // ── Drapeaux à damier au sommet des mâts (taille selon la distance) ──
+  function flag(x, dir, P) {
+    const fw = P.h * 0.34;
+    const fh = P.h * 0.09;
     if (fh < 2) return;
-    const fy = gateTop - fh * 1.1;
+    const fy = P.top - fh * 1.1;
     const flutter = Math.sin(t * 4 + (dir > 0 ? 0 : 1.5)) * fh * 0.25;
-
     ctx.save();
     ctx.beginPath();
     ctx.moveTo(x, fy);
-    ctx.quadraticCurveTo(x + dir*fw*0.5, fy + flutter, x + dir*fw, fy + flutter*0.6);
-    ctx.lineTo(x + dir*fw, fy + fh + flutter*0.6);
-    ctx.quadraticCurveTo(x + dir*fw*0.5, fy + fh + flutter, x, fy + fh);
+    ctx.quadraticCurveTo(x + dir * fw * 0.5, fy + flutter, x + dir * fw, fy + flutter * 0.6);
+    ctx.lineTo(x + dir * fw, fy + fh + flutter * 0.6);
+    ctx.quadraticCurveTo(x + dir * fw * 0.5, fy + fh + flutter, x, fy + fh);
     ctx.closePath();
     ctx.clip();
-    // Damier
     const cs = Math.max(1, fw / 4);
     for (let ry = 0; ry * cs < fh + cs; ry++) {
       for (let rx = 0; rx * cs < fw + cs; rx++) {
         ctx.fillStyle = ((rx + ry) % 2) ? '#ffffff' : '#111111';
-        const px2 = dir > 0 ? x + rx*cs : x - (rx+1)*cs;
-        ctx.fillRect(px2, fy + ry*cs + flutter*0.5, cs, cs);
+        const px2 = dir > 0 ? x + rx * cs : x - (rx + 1) * cs;
+        ctx.fillRect(px2, fy + ry * cs + flutter * 0.5, cs, cs);
       }
     }
     ctx.restore();
-    // Hampe
     ctx.strokeStyle = '#888';
-    ctx.lineWidth = Math.max(0.5, poleW * 0.3);
+    ctx.lineWidth = Math.max(0.5, P.pw * 0.3);
     ctx.beginPath();
     ctx.moveTo(x, fy);
-    ctx.lineTo(x, gateTop);
+    ctx.lineTo(x, P.top);
     ctx.stroke();
   }
-  flag(leftX, -1);
-  flag(rightX, 1);
+  flag(leftX, -1, PL);
+  flag(rightX, 1, PR);
 
-  // ── Bande de damier au sol (la vraie ligne d'arrivée) ──
-  const lineY = gateBottom - Math.max(1.5, gateH * 0.04);
-  const lineH = Math.max(1.5, gateH * 0.05);
-  for (let i = 0, x = leftX; x < rightX; i++, x += checkS) {
-    ctx.fillStyle = (i % 2) ? '#ffffff' : '#111111';
-    ctx.fillRect(x, lineY, Math.min(checkS, rightX - x), lineH);
-  }
-  // Seconde rangée décalée (vrai damier)
-  for (let i = 0, x = leftX; x < rightX; i++, x += checkS) {
-    ctx.fillStyle = (i % 2) ? '#111111' : '#ffffff';
-    ctx.fillRect(x, lineY + lineH, Math.min(checkS, rightX - x), lineH);
+  // ── Damier au sol : suit la pente du bas (vraie ligne d'arrivée en 3D) ──
+  for (let row = 0; row < 2; row++) {
+    for (let i = 0, x = leftX; x < rightX; i++, x += checkS) {
+      const k = (x - leftX) / gateW;
+      const lh = Math.max(1.5, lerp(hL, hR, k) * 0.05);
+      const ly = lerp(botL, botR, k) - lh * (2 - row);
+      ctx.fillStyle = ((i + row) % 2) ? '#ffffff' : '#111111';
+      ctx.fillRect(x, ly, Math.min(checkS, rightX - x), lh);
+    }
   }
 
   ctx.restore();
@@ -4713,12 +4776,13 @@ function drawExitArch(exitDistByCol) {
   // Halo doux pour attirer l'œil
   const pulse = 0.5 + 0.5 * Math.sin(t * 2.5);
   const cxm = (leftX + rightX) / 2;
-  const cym = gateTop + gateH * 0.5;
-  const grd = ctx.createRadialGradient(cxm, cym, 0, cxm, cym, gateH * 0.7);
+  const cym = lerp(topL + hL / 2, topR + hR / 2, 0.5);
+  const haloR = (hL + hR) / 2 * 0.7;
+  const grd = ctx.createRadialGradient(cxm, cym, 0, cxm, cym, haloR);
   grd.addColorStop(0, `rgba(245,208,32,${0.12 * pulse * alpha})`);
   grd.addColorStop(1, 'rgba(245,208,32,0)');
   ctx.fillStyle = grd;
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillRect(cxm - haloR, cym - haloR, haloR * 2, haloR * 2);
 }
 
 function hexToRgb(hex) {
@@ -4969,6 +5033,7 @@ function winGame() {
   };
   document.getElementById('shareBtn').onclick = () => shareScore(score, level);
   document.getElementById('seeLbBtn').onclick = showLeaderboard;
+
   document.getElementById('backToMapBtn').onclick = () => {
     ov.innerHTML = menuHTML;
     ov.style.display = 'flex';
@@ -5106,6 +5171,13 @@ function timeOutGame() {
     renderMenuMazeBg();
     updateIntroResumeUI();
   };
+}
+
+// ── PWA : enregistrement du service worker (hors ligne + installable) ──
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
 }
 
 // ── Détecteur d'erreurs visible (débogage sur téléphone) ─────────────
@@ -5253,7 +5325,7 @@ function applyTouchDrag() {
 
 // ── Buttons ───────────────────────────────────────────────────────────
 // Capture le HTML du menu original pour restauration depuis le classement
-menuHTML = document.getElementById('overlay-content').innerHTML;
+menuHTML = document.getElementById('overlay').innerHTML;  // structure complète (canvas de fond inclus)
 
 wireMenuButtons();
 document.getElementById('leaderboardBtn').onclick = showLeaderboard;
@@ -6160,19 +6232,27 @@ function renderWorldMap() {
     }
     // ── Champ dense sur TOUTE la surface : comme un vrai labyrinthe végétal ──
     // La plante principale remplit le champ, les accents apparaissent par touches
-    // Peu d'emojis mais GROS : même effet de champ, dessin 6x plus rapide
-    const GRID = 52;
-    for (let gy = yTop + 22; gy < yBot - 6; gy += GRID) {
+    // Champ opaque avec ombres au sol : chaque plant est posé, pas flottant
+    const GRID = 50;
+    ctx2.globalAlpha = 1;
+    for (let gy = yTop + 24; gy < yBot - 6; gy += GRID) {
       for (let gx = -10; gx < width + 10; gx += GRID) {
         const seed = zi * 7919 + Math.round(gy) * 131 + Math.round(gx);
-        const jx = (rndz(seed) - 0.5) * 22;
-        const jy = (rndz(seed + 1) - 0.5) * 18;
+        const jx = (rndz(seed) - 0.5) * 20;
+        const jy = (rndz(seed + 1) - 0.5) * 16;
         const accent = rndz(seed + 2) > 0.8;    // 20 % d'accents (fleurs, animaux…)
         const glyph = accent
           ? z.deco[1 + Math.floor(rndz(seed + 3) * (z.deco.length - 1))]
           : z.deco[0];
-        ctx2.font = (28 + Math.round(rndz(seed + 5) * 12)) + 'px serif';
-        ctx2.fillText(glyph, gx + jx, gy + jy);
+        const size = 30 + Math.round(rndz(seed + 5) * 12);
+        const px2 = gx + jx, py2 = gy + jy;
+        // Ombre elliptique au pied du plant → profondeur, effet « posé au sol »
+        ctx2.fillStyle = 'rgba(50,38,22,0.28)';
+        ctx2.beginPath();
+        ctx2.ellipse(px2 + size * 0.42, py2 + 3, size * 0.42, size * 0.14, 0, 0, Math.PI * 2);
+        ctx2.fill();
+        ctx2.font = size + 'px serif';
+        ctx2.fillText(glyph, px2, py2);
       }
     }
   });

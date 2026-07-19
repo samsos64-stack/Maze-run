@@ -1,0 +1,19 @@
+{
+  "name": "Corn Maze — Labyrinthe 3D",
+  "short_name": "Corn Maze",
+  "description": "Trouve la sortie du labyrinthe en vue 3D ! 40 niveaux, modes bonus, défi du jour.",
+  "id": "/Maze-run/",
+  "start_url": "/Maze-run/index.html",
+  "scope": "/Maze-run/",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#171b26",
+  "theme_color": "#171b26",
+  "lang": "fr",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
