@@ -704,11 +704,15 @@
          <b style="color:#e06a6a">⏱ Niveau 11+ :</b> carte cachée + temps limité !
       </p>
 
-      <div id="menuOptions" style="display:none">
+      <div id="menuOptions" style="margin-top:10px">
         <select id="sizeSelect" style="display:none">
           <option value="17" selected>Auto</option>
         </select>
-        <select id="themeSelect">
+        <select id="themeSelect" style="
+          font-family:'Fredoka','Outfit',sans-serif; font-size:0.72rem; font-weight:600;
+          padding:8px 16px; border-radius:12px; cursor:pointer;
+          background:rgba(20,26,40,0.9); color:#c9a7e8;
+          border:2px solid #a06fd0; outline:none;">
           <option value="auto" selected>Décor : Auto</option>
           <option value="briques">Décor : Briques</option>
           <option value="maïs">Décor : Maïs</option>
@@ -732,7 +736,7 @@ let continuesUsed = 0;              // continuations utilisées sur ce niveau
 const MAX_CONTINUES = 3;            // maximum par niveau
 const CONTINUE_BONUS_TIME = 30;     // secondes offertes par continuation
 const W = 320, H = 180; // internal render resolution (upscaled by CSS)
-const FOV = Math.PI / 3;  // 60°
+const FOV = Math.PI / 1.92;  // ~94° — très grand angle : couloirs bien dégagés
 const HALF_FOV = FOV / 2;
 const NUM_RAYS = W;
 // ── Stockage sécurisé : localStorage peut être BLOQUÉ (fichier ouvert en
@@ -801,12 +805,19 @@ let timeLimit = 0; // seconds; 0 = no limit (level 1 only)
 const SAVE_KEY = 'labyrinthe3d_progress';
 
 function saveProgress() {
+  if (TEST_UNLOCK_ALL) return;   // mode test : on ne touche pas à la vraie sauvegarde
   try {
     safeStore.setItem(SAVE_KEY, JSON.stringify({ level }));
   } catch(e) { /* localStorage indisponible, on ignore silencieusement */ }
 }
 
+// ── Mode test : ajoute ?unlock=1 à l'adresse pour ouvrir tous les niveaux
+// (ne change rien pour les vrais joueurs, c'est juste un raccourci de dev) ──
+var TEST_UNLOCK_ALL = false;
+try { TEST_UNLOCK_ALL = location.search.includes('unlock=1'); } catch(e) {}
+
 function loadProgress() {
+  if (TEST_UNLOCK_ALL) return MAP_LEVELS_SHOWN;   // tout débloqué pour les tests
   try {
     const raw = safeStore.getItem(SAVE_KEY);
     if (!raw) return 1;
@@ -1471,6 +1482,7 @@ function init(keepLevel=false, forceLevel=null, mode=undefined) {
   moves = 0; elapsed = 0;
   continuesUsed = 0;   // nouveau niveau = continuations remises à zéro
   dailyMode = false;   // partie normale, pas le défi
+  dailyThemeName = null;   // on rend la main au thème du niveau
   rollWeather();
   spawnPlants3D(themeForLevel(level).name);   // peuple le labyrinthe de plants 3D
   buildPlantGrid();                            // index spatial pour la performance
@@ -1593,12 +1605,18 @@ const THEMES = [
   },
   {
     name: 'buissons',
-    floorName: 'pelouse',
+    floorName: 'sentier',   // terre battue avec touffes d'herbe et fleurs
     sky: ['#0c1810', '#10241a'],
   },
 ];
 
+var dailyThemeName = null;   // thème imposé pendant le défi du jour
 function themeForLevel(lvl) {
+  // Le défi du jour a SON thème, identique pour tous les joueurs ce jour-là.
+  // (Sans ça, le décor peuplé et le décor affiché pouvaient différer → monde vide.)
+  if (dailyMode && dailyThemeName) {
+    return THEMES.find(t => t.name === dailyThemeName) || THEMES[0];
+  }
   const sel = document.getElementById('themeSelect');
   if (sel) currentThemeChoice = sel.value;
   if (currentThemeChoice !== 'auto') {
@@ -2047,26 +2065,34 @@ function genBrickTexture() {
   const palKeys = Object.keys(PAL);
   const words = ['FREE','MAZE','RUN','FLOW','WILD','KING','CREW','BOOM','ZOOM','LOST'];
 
-  // Affiche déchirée en fond (30% des murs)
-  if (Math.random() < 0.55) {
-    tornPoster(6 + Math.random()*12, 10 + Math.random()*14, 44, 58, (Math.random()*4)|0);
+  // ── Composition DÉSORGANISÉE : chaque mur tire au sort ce qu'il reçoit.
+  // Beaucoup de murs restent presque nus : c'est le contraste qui fait vrai. ──
+
+  // Affiche déchirée : rare, n'importe où
+  if (Math.random() < 0.22) {
+    tornPoster(4 + Math.random()*(S-56), 6 + Math.random()*(S-70), 44, 58, (Math.random()*4)|0);
   }
 
-  // Gros mot bubble
-  const w1 = words[(Math.random()*words.length)|0];
-  const p1 = PAL[palKeys[(Math.random()*palKeys.length)|0]];
-  bubbleWord(w1, 6 + Math.random()*8, 30 + Math.random()*10, 26, p1, -0.1 + Math.random()*0.14);
+  // Gros mot bubble : un mur sur deux seulement, position/taille/angle libres
+  if (Math.random() < 0.5) {
+    const w1 = words[(Math.random()*words.length)|0];
+    const p1 = PAL[palKeys[(Math.random()*palKeys.length)|0]];
+    bubbleWord(w1, 2 + Math.random()*(S*0.45), 18 + Math.random()*(S-40),
+               18 + Math.random()*16, p1, -0.3 + Math.random()*0.6);
+  }
 
-  // Deuxième mot
-  if (Math.random() < 0.75) {
+  // Deuxième mot : rare
+  if (Math.random() < 0.18) {
     const w2 = words[(Math.random()*words.length)|0];
     const p2 = PAL[palKeys[(Math.random()*palKeys.length)|0]];
-    bubbleWord(w2, 4 + Math.random()*10, 82 + Math.random()*12, 21, p2, -0.06 + Math.random()*0.12);
+    bubbleWord(w2, 2 + Math.random()*(S*0.4), 14 + Math.random()*(S-34),
+               14 + Math.random()*12, p2, -0.35 + Math.random()*0.7);
   }
 
-  // Tags blancs
+  // Tags blancs : 0 à 2, jamais garantis
   const tagChars = ['ST','ME','YO','XR','AK','TN','VZ'];
-  for (let i=0; i<2; i++) {
+  const nTags = (Math.random()*3)|0;
+  for (let i=0; i<nTags; i++) {
     // Rotation marquée : certains tags sont franchement de travers
     const tilt = Math.random() < 0.45
       ? (Math.random()-0.5) * 1.5      // très penché
@@ -2078,9 +2104,9 @@ function genBrickTexture() {
 
   // Élément décoratif : souvent une main, rarement une bombe, parfois rien
   const deco = Math.random();
-  if (deco < 0.45) {
+  if (deco < 0.22) {
     cartoonHand(14 + Math.random()*20, 84 + Math.random()*24, 22, (Math.random()*2)|0);
-  } else if (deco < 0.62) {
+  } else if (deco < 0.32) {
     sprayCan(92 + Math.random()*22, 76 + Math.random()*28, 30,
              ['#e53935','#1e88e5','#43a047','#fdd835'][(Math.random()*4)|0]);
   }
@@ -2088,7 +2114,8 @@ function genBrickTexture() {
 
   // Éclaboussures
   const splat = ['rgba(255,148,34,0.55)','rgba(230,77,255,0.5)','rgba(76,201,255,0.5)','rgba(141,255,46,0.45)'];
-  for (let i=0; i<20; i++) {
+  const nSplat = 3 + (Math.random()*14)|0;
+  for (let i=0; i<nSplat; i++) {
     tx.fillStyle = splat[(Math.random()*splat.length)|0];
     tx.beginPath();
     tx.arc(Math.random()*S, Math.random()*S, 0.8+Math.random()*3, 0, Math.PI*2);
@@ -2114,188 +2141,104 @@ function genCornTexture() {
   c.width = TEX_SIZE; c.height = TEX_SIZE;
   const tx = c.getContext('2d');
   const S = TEX_SIZE;
+  const rnd = () => Math.random();
 
-  // Champ dense — fond opaque, on ne voit pas au travers
-  const bgGrad = tx.createLinearGradient(0, 0, 0, S);
-  bgGrad.addColorStop(0,   '#1e4a12');  // sommet plus sombre (ombre du feuillage)
-  bgGrad.addColorStop(0.5, '#2d6b1c');
-  bgGrad.addColorStop(1,   '#1a3d0e');  // base sombre
-  tx.fillStyle = bgGrad;
+  // ── Fond : rideau de feuillage vert DENSE et opaque (mur de maïs) ──
+  const bg = tx.createLinearGradient(0, 0, 0, S);
+  bg.addColorStop(0,    '#2f5e1c');
+  bg.addColorStop(0.5,  '#3a6f22');
+  bg.addColorStop(1,    '#2a4f18');
+  tx.fillStyle = bg;
   tx.fillRect(0, 0, S, S);
 
-  // Masse de feuillage floue en fond (profondeur du champ)
-  for (let i = 0; i < 45; i++) {
-    const x = Math.random()*S, y = Math.random()*S;
-    tx.fillStyle = `rgba(${25+Math.random()*25},${70+Math.random()*40},${18+Math.random()*15},0.6)`;
+  // Couche de feuilles floues pour boucher tous les trous (opacité totale)
+  for (let i = 0; i < 90; i++) {
+    const x = rnd()*S, y = rnd()*S;
+    const g = 60 + rnd()*70;
+    tx.fillStyle = `rgb(${28+rnd()*24},${g},${18+rnd()*20})`;
     tx.beginPath();
-    tx.ellipse(x, y, 4+Math.random()*7, 2+Math.random()*4, Math.random()*Math.PI, 0, Math.PI*2);
+    tx.ellipse(x, y, 6+rnd()*11, 3+rnd()*6, rnd()*Math.PI, 0, Math.PI*2);
     tx.fill();
   }
 
-  // Palette cartoon : verts francs, contours noirs
-  const OUTLINE = '#1a3d0a';
-  const LEAF_DARK = '#4a7333';
-  const LEAF_MID  = '#5f8f42';
-  const LEAF_LIGHT= '#74a854';
-  const STALK     = '#4a9c30';
-  const CORN_Y    = '#f5c518';
-  const CORN_Y2   = '#ffd94a';
+  const OUTLINE = '#20340e';
+  const CORN_Y  = '#f2b81c';
+  const CORN_Y2 = '#ffd94e';
 
-  // ── Feuille en losange avec contour et nervure (style cartoon) ──
-  function cartoonLeaf(x, y, len, angle, fill, flip) {
-    tx.save();
-    tx.translate(x, y);
-    tx.rotate(angle);
-    if (flip) tx.scale(1, -1);
-
-    const w = len * 0.34;
-    // Contour noir
-    tx.beginPath();
-    tx.moveTo(0, 0);
-    tx.quadraticCurveTo(len*0.35, -w, len*0.72, -w*0.55);
-    tx.quadraticCurveTo(len*0.94, -w*0.2, len, 0);
-    tx.quadraticCurveTo(len*0.72, w*0.42, len*0.38, w*0.5);
-    tx.quadraticCurveTo(len*0.14, w*0.3, 0, 0);
-    tx.closePath();
-    tx.strokeStyle = OUTLINE;
-    tx.lineWidth = 1.6;
-    tx.stroke();
-    tx.fillStyle = fill;
-    tx.fill();
-
-    // Nervure blanche centrale bien visible
-    tx.strokeStyle = 'rgba(255,255,255,0.55)';
-    tx.lineWidth = 1;
-    tx.beginPath();
-    tx.moveTo(len*0.06, 0);
-    tx.quadraticCurveTo(len*0.5, -w*0.1, len*0.92, -w*0.04);
-    tx.stroke();
-
-    tx.restore();
-  }
-
-  // ── Épi de maïs : grains en damier + soie ébouriffée ──
-  function cartoonCob(x, y, h) {
-    const w = h * 0.42;
-
-    // Soie blanche ébouriffée au sommet
-    tx.strokeStyle = '#f0f0e0';
-    tx.lineWidth = 0.9;
-    for (let i = 0; i < 7; i++) {
-      const a = -Math.PI/2 + (i-3) * 0.28;
-      tx.beginPath();
-      tx.moveTo(x, y - h/2);
-      tx.quadraticCurveTo(
-        x + Math.cos(a)*h*0.22, y - h/2 - h*0.18,
-        x + Math.cos(a)*h*0.4,  y - h/2 - h*0.34
-      );
-      tx.stroke();
-    }
-
-    // Corps de l'épi, contour noir
-    tx.beginPath();
-    tx.ellipse(x, y, w/2, h/2, 0, 0, Math.PI*2);
-    tx.fillStyle = CORN_Y;
-    tx.fill();
-    tx.strokeStyle = OUTLINE;
-    tx.lineWidth = 1.4;
-    tx.stroke();
-
-    // Grains en damier
-    tx.save();
-    tx.beginPath();
-    tx.ellipse(x, y, w/2 - 0.6, h/2 - 0.6, 0, 0, Math.PI*2);
-    tx.clip();
-    const gh = 2.1, gw = 1.9;
-    for (let gy = y - h/2; gy < y + h/2; gy += gh) {
-      const row = Math.round((gy - (y - h/2)) / gh);
-      const off = (row % 2) ? gw/2 : 0;
-      for (let gx = x - w/2 - gw; gx < x + w/2 + gw; gx += gw) {
-        tx.fillStyle = ((row + Math.round(gx/gw)) % 2) ? CORN_Y2 : CORN_Y;
-        tx.fillRect(gx + off + 0.25, gy + 0.25, gw - 0.5, gh - 0.5);
-      }
-    }
-    tx.restore();
-
-    // Enveloppe verte à la base
-    tx.beginPath();
-    tx.moveTo(x - w*0.5, y + h*0.2);
-    tx.quadraticCurveTo(x, y + h*0.72, x + w*0.5, y + h*0.2);
-    tx.quadraticCurveTo(x, y + h*0.42, x - w*0.5, y + h*0.2);
-    tx.closePath();
-    tx.fillStyle = LEAF_MID;
-    tx.fill();
-    tx.strokeStyle = OUTLINE;
-    tx.lineWidth = 1.1;
-    tx.stroke();
-  }
-
-  // ── Tiges lointaines (flou de profondeur) ──
-  for (let i = 0; i < 22; i++) {
-    const x = Math.random()*S;
-    tx.strokeStyle = 'rgba(30,80,20,0.4)';
-    tx.lineWidth = 1.6;
+  // ── Grandes feuilles verticales stylisées (les tiges de maïs) ──
+  function bigLeaf(x, w, hue) {
+    tx.fillStyle = hue;
     tx.beginPath();
     tx.moveTo(x, S);
-    tx.lineTo(x + (Math.random()*5-2.5), -2);
+    tx.quadraticCurveTo(x - w, S*0.55, x - w*0.3, -4);
+    tx.quadraticCurveTo(x + w*0.3, S*0.5, x + w, S*0.6);
+    tx.quadraticCurveTo(x + w*0.4, S*0.85, x, S);
+    tx.closePath();
+    tx.fill();
+    tx.strokeStyle = OUTLINE; tx.lineWidth = 1.5; tx.stroke();
+    // nervure claire centrale
+    tx.strokeStyle = 'rgba(180,230,120,0.5)'; tx.lineWidth = 1.4;
+    tx.beginPath();
+    tx.moveTo(x, S);
+    tx.quadraticCurveTo(x - w*0.2, S*0.5, x, 0);
     tx.stroke();
   }
-
-  // ── Couche intermédiaire : feuilles qui comblent les vides ──
-  for (let i = 0; i < 14; i++) {
-    const lx = Math.random()*S;
-    const ly = Math.random()*S;
-    const dir = Math.random() > 0.5 ? 1 : -1;
-    const len = 11 + Math.random()*8;
-    const angle = dir > 0 ? -0.4 - Math.random()*0.3 : Math.PI + 0.4 + Math.random()*0.3;
-    cartoonLeaf(lx, ly, len, angle, i%2 ? '#4a7333' : '#5a8a3c', dir < 0);
+  for (let i = 0; i < 5; i++) {
+    const x = (i + 0.5) * (S/5) + (rnd()*8-4);
+    bigLeaf(x, 7 + rnd()*4, i%2 ? '#4d8a2a' : '#3f7522');
   }
 
-  // ── Plants de maïs au premier plan ──
-  const plants = 5;
-  for (let p = 0; p < plants; p++) {
-    const bx = (p + 0.5) * (S/plants) + (Math.random()*4 - 2);
-    const lean = (Math.random()*4 - 2);
-
-    // Tige avec contour noir
-    tx.strokeStyle = OUTLINE;
-    tx.lineWidth = 4.4;
+  // ── Épis GROS et lisibles (peu nombreux, fort contraste) ──
+  function cob(cx, cy, h) {
+    const w = h * 0.46;
+    // enveloppe verte
+    tx.fillStyle = '#5a9a30';
     tx.beginPath();
-    tx.moveTo(bx, S);
-    tx.quadraticCurveTo(bx + lean*0.4, S*0.5, bx + lean, -2);
-    tx.stroke();
-    tx.strokeStyle = STALK;
-    tx.lineWidth = 2.6;
+    tx.ellipse(cx, cy + h*0.1, w*0.85, h*0.62, 0, 0, Math.PI*2);
+    tx.fill();
+    tx.strokeStyle = OUTLINE; tx.lineWidth = 1.5; tx.stroke();
+    // corps jaune
+    tx.fillStyle = CORN_Y;
     tx.beginPath();
-    tx.moveTo(bx, S);
-    tx.quadraticCurveTo(bx + lean*0.4, S*0.5, bx + lean, -2);
-    tx.stroke();
-
-    // Feuilles alternées le long de la tige
-    const leafYs = [0.82, 0.62, 0.44, 0.26, 0.12];
-    leafYs.forEach((t, i) => {
-      const ly = S * t;
-      const lx = bx + lean * (1 - t);
-      const dir = (i % 2 === 0) ? 1 : -1;
-      const len = 15 + Math.random()*7;
-      const angle = dir > 0 ? -0.45 - Math.random()*0.25 : Math.PI + 0.45 + Math.random()*0.25;
-      const fill = [LEAF_DARK, LEAF_MID, LEAF_LIGHT][i % 3];
-      cartoonLeaf(lx, ly, len, angle, fill, dir < 0);
-    });
-
-    // 1-2 épis par plant
-    const cobs = Math.random() < 0.5 ? 2 : 1;
-    for (let ci = 0; ci < cobs; ci++) {
-      const t = 0.5 - ci*0.24;
-      const cy = S * t;
-      const cx = bx + lean*(1-t) + (ci%2 ? 4.5 : -4.5);
-      cartoonCob(cx, cy, 13);
+    tx.ellipse(cx, cy, w/2, h/2, 0, 0, Math.PI*2);
+    tx.fill();
+    tx.strokeStyle = OUTLINE; tx.lineWidth = 2; tx.stroke();
+    // grains en damier bien visibles
+    tx.save();
+    tx.beginPath();
+    tx.ellipse(cx, cy, w/2 - 1, h/2 - 1, 0, 0, Math.PI*2);
+    tx.clip();
+    const gh = 3.2, gw = 3;
+    for (let gy = cy - h/2; gy < cy + h/2; gy += gh) {
+      const row = Math.round((gy - (cy - h/2)) / gh);
+      for (let gx = cx - w/2 - gw; gx < cx + w/2 + gw; gx += gw) {
+        tx.fillStyle = ((row + Math.round(gx/gw)) % 2) ? CORN_Y2 : CORN_Y;
+        const off = (row % 2) ? gw/2 : 0;
+        tx.fillRect(gx + off + 0.4, gy + 0.4, gw - 0.8, gh - 0.8);
+      }
     }
+    // reflet
+    const sh = tx.createRadialGradient(cx - w*0.2, cy - h*0.25, 0, cx - w*0.2, cy - h*0.25, w*0.7);
+    sh.addColorStop(0, 'rgba(255,250,210,0.6)');
+    sh.addColorStop(1, 'rgba(255,250,210,0)');
+    tx.fillStyle = sh; tx.fillRect(cx - w, cy - h, w*2, h*2);
+    tx.restore();
   }
+
+  // 3 épis répartis (assez gros pour rester lisibles une fois le mur réduit)
+  cob(S*0.28, S*0.42, S*0.34);
+  cob(S*0.68, S*0.32, S*0.30);
+  cob(S*0.52, S*0.72, S*0.32);
+
+  // Assombrissement des bords → les répétitions se fondent (pas de couture visible)
+  const vig = tx.createRadialGradient(S/2, S/2, S*0.3, S/2, S/2, S*0.75);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(0,0,0,0.28)');
+  tx.fillStyle = vig;
+  tx.fillRect(0, 0, S, S);
 
   return tx.getImageData(0,0,S,S);
 }
-
 function genBushTexture() {
   const c = document.createElement('canvas');
   c.width = TEX_SIZE; c.height = TEX_SIZE;
@@ -2674,12 +2617,83 @@ function getTexture(themeName) {
   return data;
 }
 
+// Sentier de terre battue parsemé de touffes d'herbe et de fleurs
+function genPathTexture() {
+  const S = FLOOR_TEX_SIZE;
+  const c = document.createElement('canvas');
+  c.width = S; c.height = S;
+  const tx = c.getContext('2d');
+  const rnd = () => Math.random();
+
+  // Terre : dégradé de bruns chauds
+  tx.fillStyle = '#8a6238';
+  tx.fillRect(0, 0, S, S);
+  for (let i = 0; i < 900; i++) {
+    const v = 92 + rnd()*54;
+    tx.fillStyle = `rgb(${v},${(v*0.72)|0},${(v*0.46)|0})`;
+    tx.fillRect(rnd()*S, rnd()*S, 1 + rnd()*3, 1 + rnd()*3);
+  }
+  // Ornières et cailloux
+  for (let i = 0; i < 18; i++) {
+    tx.strokeStyle = `rgba(${60+rnd()*30},${42+rnd()*20},${24+rnd()*14},0.5)`;
+    tx.lineWidth = 1 + rnd()*2.5;
+    tx.beginPath();
+    const y0 = rnd()*S;
+    tx.moveTo(0, y0);
+    tx.bezierCurveTo(S*0.3, y0 + (rnd()-0.5)*22, S*0.7, y0 + (rnd()-0.5)*22, S, y0 + (rnd()-0.5)*14);
+    tx.stroke();
+  }
+  for (let i = 0; i < 40; i++) {
+    tx.fillStyle = `rgba(${130+rnd()*50},${115+rnd()*40},${95+rnd()*30},0.6)`;
+    tx.beginPath();
+    tx.ellipse(rnd()*S, rnd()*S, 1.2+rnd()*2.4, 1+rnd()*1.8, rnd()*3, 0, Math.PI*2);
+    tx.fill();
+  }
+
+  // Touffes d'herbe éparses
+  for (let t = 0; t < 26; t++) {
+    const gx = rnd()*S, gy = rnd()*S;
+    const blades = 5 + (rnd()*6|0);
+    for (let b = 0; b < blades; b++) {
+      const g = 90 + rnd()*70;
+      tx.strokeStyle = `rgb(${(g*0.45)|0},${g},${(g*0.35)|0})`;
+      tx.lineWidth = 1 + rnd();
+      const a = -Math.PI/2 + (rnd()-0.5) * 1.5;
+      const len = 4 + rnd()*7;
+      tx.beginPath();
+      tx.moveTo(gx + (rnd()-0.5)*6, gy + (rnd()-0.5)*4);
+      tx.lineTo(gx + Math.cos(a)*len, gy + Math.sin(a)*len);
+      tx.stroke();
+    }
+  }
+
+  // Petites fleurs au sol, plusieurs couleurs
+  const FL = ['#f5f0dc', '#f7c948', '#e8749b', '#a48ae0', '#7fd6f0'];
+  for (let f = 0; f < 16; f++) {
+    const fx = 4 + rnd()*(S-8), fy = 4 + rnd()*(S-8);
+    const col = FL[(rnd()*FL.length)|0];
+    const r = 1.6 + rnd()*1.2;
+    tx.fillStyle = col;
+    for (let p = 0; p < 5; p++) {
+      const a = (p/5) * Math.PI*2;
+      tx.beginPath();
+      tx.arc(fx + Math.cos(a)*r*1.3, fy + Math.sin(a)*r*1.3, r, 0, Math.PI*2);
+      tx.fill();
+    }
+    tx.fillStyle = '#f2b118';
+    tx.beginPath(); tx.arc(fx, fy, r*0.85, 0, Math.PI*2); tx.fill();
+  }
+
+  return tx.getImageData(0, 0, S, S);
+}
+
 const floorTextureCache = {};
 function getFloorTexture(floorName) {
   if (floorTextureCache[floorName]) return floorTextureCache[floorName];
   let data;
-  if (floorName === 'route')      data = genRoadTexture();
-  else if (floorName === 'terre') data = genDirtTexture();
+  if (floorName === 'route')        data = genRoadTexture();
+  else if (floorName === 'terre')   data = genDirtTexture();
+  else if (floorName === 'sentier') data = genPathTexture();
   else                              data = genGrassTexture();
   floorTextureCache[floorName] = data;
   return data;
@@ -2925,7 +2939,7 @@ function makeCornSprite(variant) {
   const key = 'corn' + variant;
   if (plantSprites[key]) return plantSprites[key];
 
-  const SW = 64, SH = 128;   // sprite plus haut que large
+  const SW = 88, SH = 128;   // plus large : feuilles amples + gros épis
   const c = document.createElement('canvas');
   c.width = SW; c.height = SH;
   const tx = c.getContext('2d');
@@ -2933,38 +2947,65 @@ function makeCornSprite(variant) {
   const OUTLINE = '#1a3d0a';
   const STALK   = '#5a8a3c';
   const LEAVES  = ['#4a7333', '#5f8f42', '#74a854'];
-  const CORN_Y  = '#f5c518';
-  const CORN_Y2 = '#ffd94a';
+  const CORN_Y  = '#ffc400';   // jaune franc
+  const CORN_Y2 = '#ffe270';   // grains clairs très lumineux
 
   const cx = SW/2;
   const lean = (variant % 3 - 1) * 4;   // légère inclinaison variable
 
-  // Feuille cartoon
+  // Feuille de maïs galbée, façon vraie feuille : ventre large, courbure
+  // naturelle et longue pointe effilée (référence botanique)
   function leaf(x, y, len, angle, fill, flip) {
     tx.save();
     tx.translate(x, y); tx.rotate(angle);
     if (flip) tx.scale(1, -1);
-    const w = len * 0.34;
+    tx.lineJoin = 'miter'; tx.miterLimit = 20;
+
+    const w   = len * 0.44;     // largeur au ventre
+    const TIP = len * 1.22;     // longueur totale jusqu'à la pointe
+    const droop = w * 0.34;     // la pointe retombe légèrement (courbure)
+
     tx.beginPath();
     tx.moveTo(0, 0);
-    tx.quadraticCurveTo(len*0.35, -w, len*0.72, -w*0.55);
-    tx.quadraticCurveTo(len*0.94, -w*0.2, len, 0);
-    tx.quadraticCurveTo(len*0.72, w*0.42, len*0.38, w*0.5);
-    tx.quadraticCurveTo(len*0.14, w*0.3, 0, 0);
+    // Bord supérieur : s'élargit vite, ventre au tiers, puis longue arête fine
+    tx.bezierCurveTo(len*0.14, -w*0.92, len*0.34, -w, len*0.56, -w*0.78);
+    tx.bezierCurveTo(len*0.80, -w*0.48, len*1.06, -w*0.16, TIP, droop);
+    // Bord inférieur : retour concave vers la base (galbe)
+    tx.bezierCurveTo(len*0.92, w*0.10, len*0.62, w*0.42, len*0.34, w*0.46);
+    tx.bezierCurveTo(len*0.18, w*0.44, len*0.06, w*0.24, 0, 0);
     tx.closePath();
-    tx.strokeStyle = OUTLINE; tx.lineWidth = 2; tx.stroke();
     tx.fillStyle = fill; tx.fill();
-    tx.strokeStyle = 'rgba(255,255,255,0.5)'; tx.lineWidth = 1.2;
+    tx.strokeStyle = OUTLINE; tx.lineWidth = 1.8; tx.stroke();
+
+    // Nervure centrale, suit la courbure jusqu'à la pointe
+    tx.strokeStyle = 'rgba(255,255,255,0.55)'; tx.lineWidth = 1.4;
     tx.beginPath();
-    tx.moveTo(len*0.06, 0);
-    tx.quadraticCurveTo(len*0.5, -w*0.1, len*0.92, -w*0.04);
+    tx.moveTo(len*0.04, 0);
+    tx.bezierCurveTo(len*0.4, -w*0.22, len*0.8, -w*0.14, TIP*0.97, droop*0.85);
+    tx.stroke();
+
+    // Nervures secondaires (le détail qui fait « vraie feuille »)
+    tx.strokeStyle = 'rgba(255,255,255,0.22)'; tx.lineWidth = 0.8;
+    for (let i = 1; i <= 3; i++) {
+      const t = i / 4;
+      tx.beginPath();
+      tx.moveTo(len * t * 0.9, -w * 0.1 * i);
+      tx.quadraticCurveTo(len * (t + 0.18), -w * 0.45, len * (t + 0.3), -w * 0.6);
+      tx.stroke();
+    }
+
+    // Reflet lumineux le long du bord supérieur
+    tx.strokeStyle = 'rgba(190,240,140,0.35)'; tx.lineWidth = 1.6;
+    tx.beginPath();
+    tx.moveTo(len*0.18, -w*0.76);
+    tx.quadraticCurveTo(len*0.62, -w*0.82, len*1.0, -w*0.24);
     tx.stroke();
     tx.restore();
   }
 
   // Épi de maïs
   function cob(x, y, h) {
-    const w = h * 0.42;
+    const w = h * 0.52;   // épis plus dodus
     tx.strokeStyle = '#f0f0e0'; tx.lineWidth = 1;
     for (let i=0; i<7; i++) {
       const a = -Math.PI/2 + (i-3)*0.26;
@@ -3013,12 +3054,12 @@ function makeCornSprite(variant) {
   tx.stroke();
 
   // Feuilles étagées
-  const leafYs = [0.88, 0.72, 0.56, 0.40, 0.24, 0.12];
+  const leafYs = [0.92, 0.80, 0.68, 0.56, 0.44, 0.32, 0.20, 0.10];
   leafYs.forEach((t, i) => {
     const ly = SH * t;
     const lx = cx + lean*(1-t);
     const dir = (i%2 === 0) ? 1 : -1;
-    const len = 22 + (i%3)*4;
+    const len = 30 + (i%3)*6;   // feuilles plus longues
     const angle = dir > 0 ? -0.5 : Math.PI + 0.5;
     leaf(lx, ly, len, angle, LEAVES[i%3], dir < 0);
   });
@@ -3028,8 +3069,8 @@ function makeCornSprite(variant) {
   for (let i=0; i<cobCount; i++) {
     const t = 0.52 - i*0.2;
     const cy = SH * t;
-    const cxx = cx + lean*(1-t) + (i%2 ? 7 : -7);
-    cob(cxx, cy, 20);
+    const cxx = cx + lean*(1-t) + (i%2 ? 11 : -11);
+    cob(cxx, cy, 34);   // épis nettement plus gros
   }
 
   // Touffe au sommet (panicule)
@@ -3054,105 +3095,105 @@ function makeBushSprite(variant) {
   const key = 'bush' + variant;
   if (plantSprites[key]) return plantSprites[key];
 
-  const SW = 80, SH = 90;
+  const SW = 96, SH = 128;   // plus haut et large : vraie haie, pas un buisson isolé
   const c = document.createElement('canvas');
   c.width = SW; c.height = SH;
   const tx = c.getContext('2d');
+  const rnd = () => Math.random();
 
   const OUTLINE = '#12300a';
-  const cx = SW/2, cy = SH*0.55;
+  const cx = SW/2;
 
-  // Masse principale : plusieurs blobs qui se chevauchent
-  const blobs = [
-    { x: cx,        y: cy,        r: 26, col: '#3a5c28' },
-    { x: cx - 17,   y: cy + 6,    r: 20, col: '#446b30' },
-    { x: cx + 17,   y: cy + 6,    r: 20, col: '#446b30' },
-    { x: cx - 9,    y: cy - 14,   r: 18, col: '#4d7836' },
-    { x: cx + 9,    y: cy - 14,   r: 18, col: '#4d7836' },
-    { x: cx,        y: cy - 22,   r: 15, col: '#5a8a3c' },
-  ];
-
-  // Contour global
-  tx.strokeStyle = OUTLINE; tx.lineWidth = 3;
-  blobs.forEach(b => {
-    tx.beginPath(); tx.arc(b.x, b.y, b.r, 0, Math.PI*2); tx.stroke();
-  });
-  // Remplissage
+  // ── Masse de la haie : dôme dense qui monte jusqu'en haut du sprite ──
+  const blobs = [];
+  for (let i = 0; i < 16; i++) {
+    const t = i / 15;
+    blobs.push({
+      x: cx + (rnd() - 0.5) * SW * 0.78,
+      y: SH * (0.92 - t * 0.78) + (rnd() - 0.5) * 10,
+      r: 20 + rnd() * 14,
+      col: ['#2f5220', '#3a6228', '#457330', '#4f8438'][i % 4],
+    });
+  }
+  // Contour global d'abord (donne la silhouette cartoon)
+  tx.strokeStyle = OUTLINE; tx.lineWidth = 4;
+  blobs.forEach(b => { tx.beginPath(); tx.arc(b.x, b.y, b.r, 0, Math.PI*2); tx.stroke(); });
+  // Puis remplissage : les blobs se recouvrent → masse opaque sans trou
   blobs.forEach(b => {
     tx.fillStyle = b.col;
     tx.beginPath(); tx.arc(b.x, b.y, b.r, 0, Math.PI*2); tx.fill();
   });
 
-  // Feuilles détaillées par-dessus
+  // ── Feuille de haie : petite, arrondie, avec pointe et nervure ──
   function bushLeaf(x, y, size, angle, fill) {
     tx.save();
     tx.translate(x, y); tx.rotate(angle);
     tx.beginPath();
-    tx.ellipse(0, 0, size, size*0.48, 0, 0, Math.PI*2);
+    tx.moveTo(0, 0);
+    tx.quadraticCurveTo(size*0.45, -size*0.52, size*1.15, 0);   // bord haut
+    tx.quadraticCurveTo(size*0.45, size*0.52, 0, 0);            // bord bas
+    tx.closePath();
     tx.fillStyle = fill; tx.fill();
-    tx.strokeStyle = 'rgba(10,40,5,0.5)'; tx.lineWidth = 0.6; tx.stroke();
-    tx.strokeStyle = 'rgba(180,240,140,0.4)'; tx.lineWidth = 0.5;
-    tx.beginPath(); tx.moveTo(-size*0.8, 0); tx.lineTo(size*0.8, 0); tx.stroke();
+    tx.strokeStyle = 'rgba(10,40,5,0.55)'; tx.lineWidth = 0.7; tx.stroke();
+    tx.strokeStyle = 'rgba(190,245,150,0.45)'; tx.lineWidth = 0.6;
+    tx.beginPath(); tx.moveTo(size*0.08, 0); tx.lineTo(size*1.02, 0); tx.stroke();
     tx.restore();
   }
 
-  const leafCols = ['#4a7333','#5a8a3c','#5f8f42','#6b9c4a'];
-  for (let i=0; i<70; i++) {
-    // Répartition dans la masse du buisson
-    const ang = Math.random()*Math.PI*2;
-    const rad = Math.random()*30;
-    const lx = cx + Math.cos(ang)*rad;
-    const ly = cy + Math.sin(ang)*rad*0.85 - 6;
-    if (ly > SH*0.92) continue;
-    bushLeaf(lx, ly, 3+Math.random()*3, Math.random()*Math.PI,
-             leafCols[Math.floor(Math.random()*leafCols.length)]);
+  // ── Tapis de feuilles : c'est ce qui donne la texture riche et bouche les trous ──
+  const LEAF_COLS = ['#3d6b2a', '#4a7d34', '#57903e', '#659e48', '#74ad55'];
+  for (let i = 0; i < 130; i++) {
+    const x = 4 + rnd() * (SW - 8);
+    // densité plus forte en bas (la haie est plus épaisse à la base)
+    const y = SH * (0.06 + Math.pow(rnd(), 0.75) * 0.9);
+    bushLeaf(x, y, 5 + rnd() * 5, rnd() * Math.PI * 2,
+             LEAF_COLS[(rnd() * LEAF_COLS.length) | 0]);
   }
 
-  // Baies rouges
-  for (let i=0; i<8; i++) {
-    const ang = Math.random()*Math.PI*2;
-    const rad = Math.random()*26;
-    const bx = cx + Math.cos(ang)*rad;
-    const by = cy + Math.sin(ang)*rad*0.85 - 6;
-    tx.fillStyle = '#c22020';
-    tx.beginPath(); tx.arc(bx, by, 2, 0, Math.PI*2); tx.fill();
-    tx.strokeStyle = '#7a1010'; tx.lineWidth = 0.5; tx.stroke();
-    tx.fillStyle = 'rgba(255,140,140,0.8)';
-    tx.beginPath(); tx.arc(bx-0.6, by-0.6, 0.7, 0, Math.PI*2); tx.fill();
+  // Quelques feuilles claires en haut : lumière du soleil sur la haie
+  for (let i = 0; i < 22; i++) {
+    bushLeaf(6 + rnd() * (SW - 12), SH * (0.06 + rnd() * 0.35),
+             5 + rnd() * 4, rnd() * Math.PI * 2, '#86c163');
   }
 
-  // Fleurs blanches
-  for (let i=0; i<5; i++) {
-    const ang = Math.random()*Math.PI*2;
-    const rad = Math.random()*24;
-    const fx = cx + Math.cos(ang)*rad;
-    const fy = cy + Math.sin(ang)*rad*0.85 - 8;
-    for (let p=0; p<5; p++) {
-      const pa = p*Math.PI*2/5;
-      tx.fillStyle = '#f5f5ec';
-      tx.beginPath(); tx.arc(fx+Math.cos(pa)*2.4, fy+Math.sin(pa)*2.4, 1.5, 0, Math.PI*2); tx.fill();
+  // Fleurs bien visibles et multicolores (plus des taches : de vraies fleurs)
+  const FLOWER_COLS = ['#f8f2e2', '#ff8fb1', '#ffd166', '#b58bf0', '#7fd6f0', '#ff9a62'];
+  const nFlowers = 7 + ((rnd() * 5) | 0);
+  for (let i = 0; i < nFlowers; i++) {
+    const fx = 8 + rnd() * (SW - 16), fy = SH * (0.1 + rnd() * 0.8);
+    const col = FLOWER_COLS[(rnd() * FLOWER_COLS.length) | 0];
+    const R = 4.2 + rnd() * 2.6;          // nettement plus grosses
+    // ombre douce sous la fleur : elle se détache du feuillage
+    tx.fillStyle = 'rgba(10,30,5,0.35)';
+    tx.beginPath(); tx.arc(fx + 0.8, fy + 1, R * 1.5, 0, Math.PI * 2); tx.fill();
+    // pétales
+    tx.fillStyle = col;
+    tx.strokeStyle = 'rgba(60,30,60,0.35)'; tx.lineWidth = 0.6;
+    for (let p = 0; p < 5; p++) {
+      const a = (p / 5) * Math.PI * 2 + rnd() * 0.2;
+      tx.beginPath();
+      tx.ellipse(fx + Math.cos(a) * R * 0.95, fy + Math.sin(a) * R * 0.95,
+                 R * 0.7, R * 0.52, a, 0, Math.PI * 2);
+      tx.fill(); tx.stroke();
     }
-    tx.fillStyle = '#f5c542';
-    tx.beginPath(); tx.arc(fx, fy, 1.2, 0, Math.PI*2); tx.fill();
+    // cœur
+    tx.fillStyle = '#ffc93c';
+    tx.beginPath(); tx.arc(fx, fy, R * 0.46, 0, Math.PI * 2); tx.fill();
+    tx.fillStyle = 'rgba(255,255,255,0.55)';
+    tx.beginPath(); tx.arc(fx - R * 0.15, fy - R * 0.15, R * 0.16, 0, Math.PI * 2); tx.fill();
   }
-
-  // Base / tronc
-  tx.strokeStyle = '#4a3018'; tx.lineWidth = 4;
-  tx.beginPath();
-  tx.moveTo(cx, SH); tx.lineTo(cx-1, cy+18);
-  tx.stroke();
 
   plantSprites[key] = c;
   return c;
 }
 
-// Peuple le labyrinthe avec des plants 3D à la place des murs
 function spawnPlants3D(themeName) {
   plants3D = [];
   if (themeName === 'briques') return;   // les briques restent des murs classiques
 
   const isCorn = themeName === 'maïs';
-  const perCell = isCorn ? 6 : 4;   // beaucoup plus dense
+  // Densité forte : assez de pieds pour qu'on ne voie plus le couloir derrière
+  const perCell = isCorn ? 18 : 17;   // très dense sur toute la case : mur végétal continu
 
   // ── Plants sur les murs intérieurs ET la bordure du labyrinthe ──
   for (let y = 0; y < ROWS; y++) {
@@ -3160,8 +3201,8 @@ function spawnPlants3D(themeName) {
       if (MAP[y*COLS + x] !== 0) continue;      // seulement sur les murs
       for (let i = 0; i < perCell; i++) {
         plants3D.push({
-          x: x + 0.12 + Math.random()*0.76,
-          y: y + 0.12 + Math.random()*0.76,
+          x: x + 0.04 + Math.random()*0.92,
+          y: y + 0.04 + Math.random()*0.92,
           variant: Math.floor(Math.random()*3),
           scale: 0.85 + Math.random()*0.35,
           type: isCorn ? 'corn' : 'bush',
@@ -3262,12 +3303,14 @@ function drawPlants3D(zBuf) {
     const perpDist = dist * Math.cos(rel);
     if (perpDist < 0.1) continue;
 
-    // Même projection que les murs : un objet de hauteur 1 occupe H/perpDist pixels
-    const unitH = H / perpDist;
+    // Même plancher de distance que les murs : quand on frôle une haie, elle
+    // ne grossit plus démesurément (fini la sensation d'être enserré)
+    const drawDist = Math.max(perpDist, 0.3);   // idem pour les plants
+    const unitH = H / drawDist;
     // La base du plant est posée au sol = bas du "mur" virtuel
     const groundY = (H + unitH) / 2;
-    const spriteH = unitH * p.scale * (p.type === 'corn' ? 1.25 : 0.9);
-    const spriteW = spriteH * (sprite.width / sprite.height);
+    const spriteH = unitH * p.scale * (p.type === 'corn' ? 0.56 : 0.58);   // plants bas : couloirs largement dégagés
+    const spriteW = spriteH * (sprite.width / sprite.height) * 0.58;   // affinés : chemin bien dégagé
     const screenX = (0.5 + rel / FOV) * W;
 
     const drawX = screenX - spriteW/2;
@@ -3796,7 +3839,7 @@ function initAudio() {
 
     // Bus bruitages
     sfxGain = audioCtx.createGain();
-    sfxGain.gain.value = soundEnabled ? 0.35 : 0;
+    sfxGain.gain.value = soundEnabled ? 0.6 : 0;
     sfxGain.connect(masterGain);
 
     // Bus musique — volume bas, la musique doit rester discrète
@@ -3815,7 +3858,7 @@ function setSoundEnabled(on) {
   soundEnabled = on;
   try { safeStore.setItem(SOUND_KEY, on ? '1' : '0'); } catch(e) {}
   initAudio();
-  if (sfxGain) sfxGain.gain.setTargetAtTime(on ? 0.35 : 0, audioCtx.currentTime, 0.05);
+  if (sfxGain) sfxGain.gain.setTargetAtTime(on ? 0.6 : 0, audioCtx.currentTime, 0.05);
   if (on) { resumeAudio(); startAmbient(); }
   else stopAmbient();
 }
@@ -3848,42 +3891,68 @@ function getNoiseBuffer() {
 
 // ── PAS — bruissement étouffé selon le décor ──
 let lastStepTime = 0;
+let stepFoot = 0;   // alterne pied gauche / droit
 function sfxStep() {
   if (!soundEnabled) return;
   const ctxA = initAudio(); if (!ctxA) return;
   const now = ctxA.currentTime;
-  // Évite la saturation si on avance vite
   if (now - lastStepTime < 0.18) return;
   lastStepTime = now;
 
   const isCity = themeForLevel(level).name === 'briques';
   const nb = getNoiseBuffer(); if (!nb) return;
+  stepFoot ^= 1;
+  const foot = stepFoot ? 1.0 : 0.9;
 
-  const src = ctxA.createBufferSource();
-  src.buffer = nb;
-  src.playbackRate.value = 0.8 + Math.random()*0.4;
-
-  const filt = ctxA.createBiquadFilter();
-  if (isCity) {
-    // Pas sur le bitume : plus sec, plus aigu
-    filt.type = 'bandpass';
-    filt.frequency.value = 900 + Math.random()*400;
-    filt.Q.value = 1.2;
-  } else {
-    // Pas dans la végétation : bruissement mat
-    filt.type = 'lowpass';
-    filt.frequency.value = 420 + Math.random()*180;
+  // ── Grain : un micro-craquement très court. Un vrai pas enregistré est une
+  // grappe de ces grains sur ~100 ms — c'est ce qui donne le « crunch ». ──
+  function grain(t, vol, freq, dur, rate) {
+    const src = ctxA.createBufferSource();
+    src.buffer = nb;
+    src.playbackRate.value = rate;
+    const f = ctxA.createBiquadFilter();
+    f.type = 'bandpass';
+    f.frequency.value = freq;
+    f.Q.value = 2.2;                      // Q élevé = grain net, pas un souffle
+    const g = ctxA.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.002);   // attaque très sèche
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    src.connect(f); f.connect(g); g.connect(sfxGain);
+    src.start(t); src.stop(t + dur + 0.02);
   }
 
-  const g = ctxA.createGain();
-  const vol = isCity ? 0.16 : 0.13;
-  g.gain.setValueAtTime(0, now);
-  g.gain.linearRampToValueAtTime(vol, now + 0.008);
-  g.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+  // ── 1. Le poids du corps : thump grave et bref ──
+  const thud = ctxA.createOscillator();
+  thud.type = 'sine';
+  const f0 = (isCity ? 130 : 95) * foot;
+  thud.frequency.setValueAtTime(f0, now);
+  thud.frequency.exponentialRampToValueAtTime(f0 * 0.5, now + 0.06);
+  const tg = ctxA.createGain();
+  tg.gain.setValueAtTime(0, now);
+  tg.gain.linearRampToValueAtTime(0.4, now + 0.004);
+  tg.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+  thud.connect(tg); tg.connect(sfxGain);
+  thud.start(now); thud.stop(now + 0.11);
 
-  src.connect(filt); filt.connect(g); g.connect(sfxGain);
-  src.start(now);
-  src.stop(now + 0.12);
+  // ── 2. La grappe de craquements (le « crunch » du sol) ──
+  const nGrains = isCity ? 5 : 9;         // la terre craque plus que le bitume
+  const spread  = isCity ? 0.055 : 0.11;  // durée totale de la grappe
+  for (let i = 0; i < nGrains; i++) {
+    // Les premiers grains sont les plus forts : le pied se pose puis roule
+    const p = i / nGrains;
+    const t = now + Math.pow(p, 1.3) * spread + Math.random() * 0.008;
+    const decay = 1 - p * 0.75;
+    const vol = (isCity ? 0.34 : 0.4) * decay * (0.6 + Math.random() * 0.5);
+    const freq = (isCity ? 1600 : 1100) * foot
+               * (0.55 + Math.random() * 1.5);   // hauteurs variées = matière
+    grain(t, vol, freq, 0.02 + Math.random() * 0.03,
+          0.7 + Math.random() * 0.7);
+  }
+
+  // ── 3. Frottement final de la semelle qui quitte le sol ──
+  grain(now + spread * 0.9, isCity ? 0.12 : 0.16,
+        (isCity ? 3200 : 2400) * foot, 0.05, 0.5 + Math.random() * 0.3);
 }
 
 // ── COLLISION — petit toc sourd ──
@@ -4060,7 +4129,7 @@ function startAmbient() {
 
   const g = ctxA.createGain();
   g.gain.value = 0;
-  g.gain.setTargetAtTime(isCity ? 0.035 : 0.042, ctxA.currentTime, 1.2);   // vent discret
+  g.gain.setTargetAtTime(0, ctxA.currentTime, 1.2);   // vent coupé (désagréable)
 
   // LFO : le vent monte et descend naturellement
   const lfo = ctxA.createOscillator();
@@ -4088,7 +4157,7 @@ function startAmbient() {
 
     const rg = ctxA.createGain();
     rg.gain.value = 0;
-    rg.gain.setTargetAtTime(0.032, ctxA.currentTime, 0.8);   // pluie en fond, sous la musique
+    rg.gain.setTargetAtTime(0, ctxA.currentTime, 0.8);   // pluie coupée (comme le vent)
 
     rsrc.connect(rfilt); rfilt.connect(rg); rg.connect(sfxGain);
     rsrc.start();
@@ -4567,7 +4636,9 @@ function render() {
     // Z-buffer : sur les thèmes végétaux les murs ne sont pas dessinés,
     // donc rien ne doit masquer les plants → distance infinie
     zBuf[col] = usePlants3D ? Infinity : perpDist;
-    const wallH = Math.min(H, Math.floor(H / (perpDist + 0.0001)));
+    // Distance minimale : évite le zoom énorme quand on colle un mur
+    const drawDist = Math.max(perpDist, 0.28);   // filet de sécurité (la marge de collision fait le vrai travail)
+    const wallH = Math.min(H, Math.floor(H * 0.78 / drawDist));
     const wallTop = Math.floor((H - wallH) / 2);
     const wallBottom = wallTop + wallH;
 
@@ -4580,7 +4651,7 @@ function render() {
       ? getBrickVariant(((mapX * 7 + mapY * 13) % BRICK_VARIANTS + BRICK_VARIANTS) % BRICK_VARIANTS).data
       : tex.data;
 
-    let texX = (wallX * TEX_SIZE) | 0;
+    let texX = (wallX * TEX_SIZE) | 0;   // 1 œuvre par mur (la marge de collision gère le zoom)
     // Sens de lecture des textures : inversé par rapport à la convention
     // classique car notre repère d'angles diffère — sinon les graffitis
     // s'affichent en miroir (« ƎZ∀W » au lieu de « MAZE »)
@@ -4594,7 +4665,7 @@ function render() {
     const top = wallTop < 0 ? 0 : wallTop;
     const bottom = wallBottom > H ? H : wallBottom;
 
-    // Thèmes végétaux : pas de mur texturé, seuls les plants 3D sont dessinés
+    // Buissons uniquement : pas de mur texturé, seuls les plants 3D sont dessinés
     if (usePlants3D) continue;
 
     for (let y = top; y < bottom; y++) {
@@ -4898,10 +4969,19 @@ function bumpWall() {
   vibrate(15);
 }
 
+function isOpenCell(x, y) {
+  const mx = Math.floor(x), my = Math.floor(y);
+  return mx >= 0 && my >= 0 && mx < COLS && my < ROWS && MAP[my*COLS + mx] !== 0;
+}
+
 function tryMove(nx, ny) {
-  const mx=Math.floor(nx), my=Math.floor(ny);
-  if (mx<0||my<0||mx>=COLS||my>=ROWS) { bumpWall(); return; }
-  if (MAP[my*COLS+mx]===0) { bumpWall(); return; }
+  // Marge de sécurité : on reste toujours à ≥0.3 des murs.
+  // C'est ce qui supprime le « zoom » : impossible d'avoir le nez sur la texture.
+  const m = 0.16;   // assez pour éviter le nez sur le mur, sans gêner les virages
+  if (!isOpenCell(nx - m, ny - m) || !isOpenCell(nx + m, ny - m) ||
+      !isOpenCell(nx - m, ny + m) || !isOpenCell(nx + m, ny + m)) {
+    bumpWall(); return;
+  }
   const prevX=Math.floor(px), prevY=Math.floor(py);
   px=nx; py=ny;
   if (Math.floor(px)!==prevX || Math.floor(py)!==prevY) {
@@ -5478,6 +5558,7 @@ document.getElementById('quitToMenuBtn').addEventListener('click', () => {
   if (dailyMode) {
     recordDaily(false, 0);
     dailyMode = false;
+    dailyThemeName = null;   // fin du défi : thème du niveau à nouveau
   }
   running = false;
   clearInterval(timerInterval);
@@ -5942,7 +6023,7 @@ function drawItemEffects() {
 
 // ══ DÉFI QUOTIDIEN ═══════════════════════════════════════════════════
 const DAILY_KEY = 'mazerun_daily';
-let dailyMode = false;      // true quand on joue le défi du jour
+var dailyMode = false;      // true quand on joue le défi du jour (var : lisible depuis themeForLevel)
 
 // Clé du jour au format AAAA-MM-JJ
 function todayKey(d) {
@@ -6028,8 +6109,12 @@ function startDaily() {
   moves = 0; elapsed = 0;
   continuesUsed = MAX_CONTINUES;   // pas de continuation sur le défi
 
+  // Thème du jour : le même pour tout le monde, change chaque jour
+  const dayIdx = Math.floor(Date.now() / 86400000);
+  dailyThemeName = THEMES[dayIdx % THEMES.length].name;
+
   rollWeather();
-  spawnPlants3D(themeForLevel(1).name);
+  spawnPlants3D(themeForLevel(1).name);   // themeForLevel renvoie le thème du jour
   buildPlantGrid();
 
   document.getElementById('hMoves').textContent = 0;
@@ -6087,6 +6172,7 @@ function recordDaily(success, score) {
 function showDailyResults(bonusItem) {
   running = false;
   dailyMode = false;
+  dailyThemeName = null;   // fin du défi : thème du niveau à nouveau
   const data = loadDaily();
   const today = data.history[todayKey()];
   const ov = document.getElementById('overlay');
