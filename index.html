@@ -601,11 +601,6 @@
       <button id="minimap-toggle">CARTE ▲</button>
       <canvas id="minimap"></canvas>
     </div>
-    <!-- Boussole SORTIE du conteneur carte : reste visible même quand la carte
-         disparaît (niv. 11+), c'est là qu'elle est le plus utile -->
-    <div id="compass" title="Direction de la sortie">
-      <div id="compassArrow">↑</div>
-    </div>
     </div>
     <div id="crosshair"></div>
 
@@ -4748,8 +4743,6 @@ function render() {
 
   drawExitArch(exitDistByCol);
 
-  updateCompass();   // boussole mise à jour en continu (même sans carte, niv. 11+)
-
   // ── Overlay effects (cheap vector draws on top) ─────────────────────
   updateAnts();
   drawAnts();          // fourmis : décors naturels
@@ -6020,38 +6013,104 @@ function drawItemEffects() {
     ctx.restore();
   }
 
-  // ── Fil d'Ariane : trace le chemin parcouru ──
+  // ── Fil d'Ariane : empreintes mouillées DEVANT le joueur, vers la sortie ──
+  // Calcule le plus court chemin (BFS) de la case du joueur jusqu'à la sortie,
+  // et pose des empreintes au sol sur les ~14 prochaines cases.
   if (threadActive > 0) {
     threadActive--;
     const fade = threadActive < 90 ? threadActive/90 : 1;
-    if (threadPath.length > 1) {
+    const path = shortestPathToExit();
+    if (path && path.length > 1) {
       ctx.save();
-      ctx.globalAlpha = 0.55 * fade;
-      for (const p of threadPath) {
-        const dx = p.x - px, dy = p.y - py;
+      const MAX = Math.min(path.length, 14);   // n'affiche que le début du chemin
+      for (let i = 1; i < MAX; i++) {
+        const c = path[i];
+        const tx = c.x + 0.5, ty = c.y + 0.5;   // centre de la case
+        const dx = tx - px, dy = ty - py;
         const dist = Math.hypot(dx, dy);
-        if (dist > 7 || dist < 0.3) continue;
+        if (dist < 0.25) continue;
+
         let rel = Math.atan2(dy, dx) - pAngle;
         while (rel > Math.PI) rel -= Math.PI*2;
         while (rel < -Math.PI) rel += Math.PI*2;
-        if (Math.abs(rel) > HALF_FOV) continue;
+        if (Math.abs(rel) > HALF_FOV + 0.25) continue;
 
         const perp = dist * Math.cos(rel);
-        if (perp < 0.2) continue;
+        if (perp < 0.25) continue;
+
         const unitH = H / perp;
         const sx = (0.5 + rel/FOV) * W;
-        const sy = (H + unitH) / 2;
-        if (sy > H) continue;
-        const sz = Math.max(0.8, unitH * 0.012);
+        const sy = H/2 + unitH * 0.5;            // niveau du sol
+        if (sy < H/2 || sy > H) continue;
 
-        ctx.fillStyle = '#a3d9b8';
+        // OCCLUSION : si un mur (buisson) est plus proche que l'empreinte
+        // sur cette colonne, l'empreinte est cachée derrière → on ne la dessine pas.
+        const zcol = Math.floor(sx / W * NUM_RAYS);
+        const zb = render._zBuf;
+        if (zb && zcol >= 0 && zcol < NUM_RAYS && zb[zcol] < perp - 0.15) continue;
+
+        // Plus proche = plus visible ; s'estompe vers la sortie
+        const near = 1 - (i / MAX);
+        const a = (0.55 + 0.4 * near) * fade;   // plus opaque = plus flashy
+        const w = Math.max(4, unitH * 0.1);     // ~1,7x plus grandes
+        const h = w * 0.5;
+        const side = (i % 2 === 0) ? -1 : 1;
+        const ox = side * w * 0.45;
+
+        // Empreinte mouillée flashy : contour cyan vif + cœur lumineux
+        ctx.globalAlpha = a * 0.85;
+        ctx.fillStyle = '#00d0ff';               // cyan flashy
         ctx.beginPath();
-        ctx.arc(sx, sy - sz, sz, 0, Math.PI*2);
+        ctx.ellipse(sx + ox, sy, w*0.9, h, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.globalAlpha = a;
+        ctx.fillStyle = '#aef4ff';               // cœur clair lumineux
+        ctx.beginPath();
+        ctx.ellipse(sx + ox, sy - h*0.15, w*0.55, h*0.55, 0, 0, Math.PI*2);
         ctx.fill();
       }
       ctx.restore();
+      ctx.globalAlpha = 1;
     }
   }
+}
+
+// BFS : plus court chemin de la case du joueur à la sortie (liste de cases)
+function shortestPathToExit() {
+  const sx = Math.floor(px), sy = Math.floor(py);
+  const ex = exitX, ey = exitY;
+  if (sx === ex && sy === ey) return null;
+  const key = (x,y) => y*COLS + x;
+  const prev = new Map();
+  const seen = new Uint8Array(COLS*ROWS);
+  const q = [[sx, sy]];
+  seen[key(sx,sy)] = 1;
+  const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+  let found = false;
+  while (q.length) {
+    const [cx, cy] = q.shift();
+    if (cx === ex && cy === ey) { found = true; break; }
+    for (const [ddx, ddy] of DIRS) {
+      const nx = cx+ddx, ny = cy+ddy;
+      if (nx<0||ny<0||nx>=COLS||ny>=ROWS) continue;
+      if (MAP[ny*COLS+nx] === 0) continue;        // mur
+      const k = key(nx,ny);
+      if (seen[k]) continue;
+      seen[k] = 1;
+      prev.set(k, key(cx,cy));
+      q.push([nx, ny]);
+    }
+  }
+  if (!found) return null;
+  const path = [];
+  let k = key(ex, ey);
+  while (k !== undefined) {
+    path.push({ x: k % COLS, y: Math.floor(k / COLS) });
+    k = prev.get(k);
+    if (k === key(sx,sy)) { path.push({ x: sx, y: sy }); break; }
+  }
+  path.reverse();
+  return path;
 }
 
 // ══ DÉFI QUOTIDIEN ═══════════════════════════════════════════════════
