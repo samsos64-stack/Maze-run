@@ -278,15 +278,20 @@
 
   /* COMPASS — pointe vers la sortie, indication légère sans donner le chemin */
   #compass {
-    width: 34px; height: 34px;
+    position: absolute;
+    top: calc(150px + env(safe-area-inset-top));
+    right: calc(10px + env(safe-area-inset-right));
+    z-index: 4;
+    width: 42px; height: 42px;
     border-radius: 50%;
-    background: rgba(20,16,40,0.8);
-    border: 1px solid var(--accent);
+    background: rgba(20,16,40,0.85);
+    border: 2px solid var(--accent);
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 0 10px rgba(109,189,138,0.25);
+    box-shadow: 0 0 12px rgba(109,189,138,0.35);
   }
+  #compassArrow { font-size: 1.35rem; }
   #compassArrow {
     color: var(--accent);
     font-size: 1.1rem;
@@ -595,9 +600,11 @@
     <div id="minimap-wrap">
       <button id="minimap-toggle">CARTE ▲</button>
       <canvas id="minimap"></canvas>
-      <div id="compass" title="Direction de la sortie">
-        <div id="compassArrow">↑</div>
-      </div>
+    </div>
+    <!-- Boussole SORTIE du conteneur carte : reste visible même quand la carte
+         disparaît (niv. 11+), c'est là qu'elle est le plus utile -->
+    <div id="compass" title="Direction de la sortie">
+      <div id="compassArrow">↑</div>
     </div>
     </div>
     <div id="crosshair"></div>
@@ -4741,6 +4748,8 @@ function render() {
 
   drawExitArch(exitDistByCol);
 
+  updateCompass();   // boussole mise à jour en continu (même sans carte, niv. 11+)
+
   // ── Overlay effects (cheap vector draws on top) ─────────────────────
   updateAnts();
   drawAnts();          // fourmis : décors naturels
@@ -4963,8 +4972,6 @@ function drawMinimap() {
   mmCtx.moveTo(px*cs, py*cs);
   mmCtx.lineTo((px+Math.cos(pAngle)*1.5)*cs, (py+Math.sin(pAngle)*1.5)*cs);
   mmCtx.stroke();
-
-  updateCompass();
 }
 
 // Boussole : indique la direction à vol d'oiseau vers la sortie, relative
