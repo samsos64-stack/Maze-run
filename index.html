@@ -2240,116 +2240,106 @@ function genCornTexture() {
   return tx.getImageData(0,0,S,S);
 }
 function genBushTexture() {
-  const c = document.createElement('canvas');
-  c.width = TEX_SIZE; c.height = TEX_SIZE;
-  const tx = c.getContext('2d');
   const S = TEX_SIZE;
+  const SS = 2;                      // on dessine 2× plus grand puis on réduit
+  const big = document.createElement('canvas');
+  big.width = S * SS; big.height = S * SS;
+  const tx = big.getContext('2d');
+  tx.scale(SS, SS);
+  tx.imageSmoothingEnabled = true;
+  tx.imageSmoothingQuality = 'high';
+  const rnd = () => Math.random();
 
-  // TRANSPARENT — les trous du feuillage laissent passer la lumière
-  tx.clearRect(0, 0, S, S);
+  // ── Haie taillée en cube, façon jardin à la française : dense, opaque,
+  // avec facettes de lumière et myriade de petites feuilles nettes. ──
 
-  // Branches structurelles visibles à travers
-  tx.strokeStyle = 'rgba(58,34,18,0.85)';
-  tx.lineWidth = 1.8;
-  for (let i=0; i<7; i++) {
-    const bx = Math.random()*S;
-    tx.beginPath();
-    tx.moveTo(bx, S);
-    let cx = bx, cy = S;
-    for (let seg=0; seg<3; seg++) {
-      const nx = cx + (Math.random()*14-7);
-      const ny = cy - S/3;
-      tx.quadraticCurveTo(cx+(Math.random()*6-3), (cy+ny)/2, nx, ny);
-      cx = nx; cy = ny;
-    }
-    tx.stroke();
-  }
+  // Fond : dégradé vertical du feuillage (sombre en bas, éclairé en haut)
+  const bg = tx.createLinearGradient(0, 0, 0, S);
+  bg.addColorStop(0,   '#5b9440');
+  bg.addColorStop(0.5, '#4a8035');
+  bg.addColorStop(1,   '#356026');
+  tx.fillStyle = bg;
+  tx.fillRect(0, 0, S, S);
 
-  // Fonction pour dessiner une feuille ovale réaliste
-  function leaf(x, y, size, angle, r, g, b, alpha) {
+  // Facette d'ombre sur les côtés → donne le volume du cube taillé
+  const shL = tx.createLinearGradient(0, 0, S * 0.22, 0);
+  shL.addColorStop(0, 'rgba(0,0,0,0.28)'); shL.addColorStop(1, 'rgba(0,0,0,0)');
+  tx.fillStyle = shL; tx.fillRect(0, 0, S * 0.22, S);
+  const shR = tx.createLinearGradient(S, 0, S * 0.78, 0);
+  shR.addColorStop(0, 'rgba(0,0,0,0.28)'); shR.addColorStop(1, 'rgba(0,0,0,0)');
+  tx.fillStyle = shR; tx.fillRect(S * 0.78, 0, S * 0.22, S);
+  // Arête supérieure éclairée (le sommet taillé qui prend la lumière)
+  const shT = tx.createLinearGradient(0, 0, 0, S * 0.16);
+  shT.addColorStop(0, 'rgba(200,255,150,0.35)'); shT.addColorStop(1, 'rgba(200,255,150,0)');
+  tx.fillStyle = shT; tx.fillRect(0, 0, S, S * 0.16);
+
+  // ── Petites feuilles : tapis dense et net (le détail « haie taillée ») ──
+  const LEAF = ['#2f5a22', '#3a6b2a', '#478034', '#56953f', '#68aa4c', '#7cbb5c'];
+  function leaf(x, y, sz, ang) {
     tx.save();
-    tx.translate(x, y);
-    tx.rotate(angle);
-    tx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+    tx.translate(x, y); tx.rotate(ang);
     tx.beginPath();
-    tx.ellipse(0, 0, size, size*0.5, 0, 0, Math.PI*2);
+    tx.moveTo(0, 0);
+    tx.quadraticCurveTo(sz * 0.5, -sz * 0.5, sz * 1.2, 0);
+    tx.quadraticCurveTo(sz * 0.5, sz * 0.5, 0, 0);
+    tx.closePath();
     tx.fill();
-    // Nervure
-    tx.strokeStyle = `rgba(${Math.min(255,r+40)},${Math.min(255,g+50)},${b},${alpha*0.5})`;
-    tx.lineWidth = 0.4;
-    tx.beginPath();
-    tx.moveTo(-size*0.8, 0); tx.lineTo(size*0.8, 0);
-    tx.stroke();
     tx.restore();
   }
-
-  // Couche profonde (sombre, semi-transparente — laisse voir les trous)
-  for (let i=0; i<45; i++) {
-    leaf(
-      Math.random()*S, Math.random()*S,
-      2.5+Math.random()*2.5, Math.random()*Math.PI,
-      18+Math.random()*15, 52+Math.random()*25, 14+Math.random()*10,
-      0.55+Math.random()*0.25
-    );
+  // grille jitterée pour une couverture homogène et dense
+  const step = 5.5;
+  for (let gy = -2; gy < S + 4; gy += step) {
+    for (let gx = -2; gx < S + 4; gx += step) {
+      const x = gx + (rnd() - 0.5) * 5;
+      const y = gy + (rnd() - 0.5) * 5;
+      // plus clair en haut, plus sombre en bas → renforce le galbe
+      const shade = Math.min(LEAF.length - 1,
+        (rnd() * 3 | 0) + Math.round((1 - y / S) * 2.2));
+      tx.fillStyle = LEAF[Math.max(0, Math.min(LEAF.length - 1, shade))];
+      leaf(x, y, 3.4 + rnd() * 2.4, rnd() * Math.PI * 2);
+    }
   }
 
-  // Couche moyenne
-  for (let i=0; i<55; i++) {
-    leaf(
-      Math.random()*S, Math.random()*S,
-      2+Math.random()*3, Math.random()*Math.PI,
-      38+Math.random()*30, 95+Math.random()*45, 24+Math.random()*18,
-      0.7+Math.random()*0.25
-    );
+  // Reflets ponctuels (gouttelettes de lumière sur le dessus du feuillage)
+  for (let i = 0; i < 40; i++) {
+    tx.fillStyle = `rgba(190,240,150,${0.15 + rnd() * 0.25})`;
+    const x = rnd() * S, y = rnd() * S * 0.6;
+    tx.beginPath(); tx.arc(x, y, 0.8 + rnd() * 1.2, 0, Math.PI * 2); tx.fill();
   }
 
-  // Couche surface (claire, éclairée)
-  for (let i=0; i<40; i++) {
-    leaf(
-      Math.random()*S, Math.random()*S,
-      1.8+Math.random()*2.2, Math.random()*Math.PI,
-      65+Math.random()*45, 145+Math.random()*60, 40+Math.random()*30,
-      0.75+Math.random()*0.25
-    );
-  }
-
-  // Trous volontaires : on efface des zones pour créer des interstices
-  tx.globalCompositeOperation = 'destination-out';
-  for (let i=0; i<12; i++) {
-    const hx = Math.random()*S, hy = Math.random()*S;
-    const hr = 1.5+Math.random()*3;
-    const grad = tx.createRadialGradient(hx, hy, 0, hx, hy, hr);
-    grad.addColorStop(0, 'rgba(0,0,0,0.85)');
-    grad.addColorStop(1, 'rgba(0,0,0,0)');
-    tx.fillStyle = grad;
-    tx.beginPath(); tx.arc(hx, hy, hr, 0, Math.PI*2); tx.fill();
-  }
-  tx.globalCompositeOperation = 'source-over';
-
-  // Baies rouges
-  for (let i=0; i<10; i++) {
-    const bx = Math.random()*S, by = Math.random()*S;
-    tx.fillStyle = '#b81c1c';
-    tx.beginPath(); tx.arc(bx, by, 1.6, 0, Math.PI*2); tx.fill();
-    tx.fillStyle = 'rgba(255,120,120,0.7)';
-    tx.beginPath(); tx.arc(bx-0.5, by-0.5, 0.6, 0, Math.PI*2); tx.fill();
-  }
-
-  // Petites fleurs blanches
-  for (let i=0; i<5; i++) {
-    const fx = Math.random()*S, fy = Math.random()*S;
-    for (let p=0; p<5; p++) {
-      const pa = p*Math.PI*2/5;
-      tx.fillStyle = 'rgba(245,245,235,0.9)';
+  // ── Fleurs cartoon, grosses et nettes, multicolores ──
+  const FLOWER = ['#f8f2e2', '#ff8fb1', '#ffd166', '#b58bf0', '#7fd6f0', '#ff9a62'];
+  const nF = 5 + (rnd() * 3 | 0);
+  for (let i = 0; i < nF; i++) {
+    const fx = 8 + rnd() * (S - 16), fy = 10 + rnd() * (S - 20);
+    const col = FLOWER[(rnd() * FLOWER.length) | 0];
+    const R = 4 + rnd() * 2.4;
+    tx.fillStyle = 'rgba(10,30,5,0.3)';
+    tx.beginPath(); tx.arc(fx + 0.7, fy + 0.9, R * 1.4, 0, Math.PI * 2); tx.fill();
+    tx.fillStyle = col;
+    for (let p = 0; p < 5; p++) {
+      const a = (p / 5) * Math.PI * 2;
       tx.beginPath();
-      tx.arc(fx+Math.cos(pa)*2.2, fy+Math.sin(pa)*2.2, 1.3, 0, Math.PI*2);
+      tx.ellipse(fx + Math.cos(a) * R * 0.9, fy + Math.sin(a) * R * 0.9,
+                 R * 0.62, R * 0.46, a, 0, Math.PI * 2);
       tx.fill();
     }
-    tx.fillStyle = '#f5c542';
-    tx.beginPath(); tx.arc(fx, fy, 1, 0, Math.PI*2); tx.fill();
+    tx.fillStyle = '#ffc93c';
+    tx.beginPath(); tx.arc(fx, fy, R * 0.42, 0, Math.PI * 2); tx.fill();
   }
 
-  return tx.getImageData(0,0,S,S);
+  // Léger contour sombre sur tout le bloc → sépare bien les cases voisines
+  tx.strokeStyle = 'rgba(20,45,15,0.5)'; tx.lineWidth = 2;
+  tx.strokeRect(1, 1, S - 2, S - 2);
+
+  // Réduction vers la taille standard : le downsampling lisse tout → net et sans crénelage
+  const c = document.createElement('canvas');
+  c.width = S; c.height = S;
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(big, 0, 0, S, S);
+  return ctx.getImageData(0, 0, S, S);
 }
 
 // ── Floor textures ──────────────────────────────────────────────────
@@ -2939,10 +2929,14 @@ function makeCornSprite(variant) {
   const key = 'corn' + variant;
   if (plantSprites[key]) return plantSprites[key];
 
-  const SW = 88, SH = 128;   // plus large : feuilles amples + gros épis
+  const SW = 88, SH = 128;   // dimensions logiques
+  const SS = 3;              // suréchantillonnage : 3× plus de pixels = net, pas flou
   const c = document.createElement('canvas');
-  c.width = SW; c.height = SH;
+  c.width = SW * SS; c.height = SH * SS;
   const tx = c.getContext('2d');
+  tx.scale(SS, SS);                    // on dessine en coordonnées logiques
+  tx.imageSmoothingEnabled = true;
+  tx.imageSmoothingQuality = 'high';
 
   const OUTLINE = '#1a3d0a';
   const STALK   = '#5a8a3c';
@@ -3095,10 +3089,14 @@ function makeBushSprite(variant) {
   const key = 'bush' + variant;
   if (plantSprites[key]) return plantSprites[key];
 
-  const SW = 96, SH = 128;   // plus haut et large : vraie haie, pas un buisson isolé
+  const SW = 96, SH = 128;   // dimensions logiques
+  const SS = 3;              // suréchantillonnage : rendu net
   const c = document.createElement('canvas');
-  c.width = SW; c.height = SH;
+  c.width = SW * SS; c.height = SH * SS;
   const tx = c.getContext('2d');
+  tx.scale(SS, SS);
+  tx.imageSmoothingEnabled = true;
+  tx.imageSmoothingQuality = 'high';
   const rnd = () => Math.random();
 
   const OUTLINE = '#12300a';
@@ -3191,6 +3189,7 @@ function spawnPlants3D(themeName) {
   plants3D = [];
   if (themeName === 'briques') return;   // les briques restent des murs classiques
 
+  if (themeName === 'buissons') return;   // haie = mur plein, pas de sprites
   const isCorn = themeName === 'maïs';
   // Densité forte : assez de pieds pour qu'on ne voie plus le couloir derrière
   const perCell = isCorn ? 18 : 17;   // très dense sur toute la case : mur végétal continu
@@ -3328,6 +3327,8 @@ function drawPlants3D(zBuf) {
 
     // Dessin colonne par colonne pour respecter l'occlusion
     ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';   // sprites HQ : plus de bavure « Minecraft flou »
     let segStart = -1;
     for (let col = colStart; col <= colEnd + 1; col++) {
       const occluded = (col > colEnd) || (zBuf[col] !== undefined && zBuf[col] < perpDist);
@@ -4380,7 +4381,9 @@ function render() {
   const floorTex = getFloorTexture(theme.floorName);
   const buf = frameBuf;
   // Thèmes végétaux → plants 3D au lieu de murs texturés
-  const usePlants3D = (theme.name === 'maïs' || theme.name === 'buissons');
+  // Maïs : plants 3D (validé). Buissons : mur plein texturé « haie taillée »
+  // → net, pas coupé en haut, pas de flou de sprite étiré.
+  const usePlants3D = (theme.name === 'maïs');
 
   // ── Sky (top half) — dégradé + nuages procéduraux ──────────────────
   let skyTopRGB, skyBotRGB;
@@ -4660,7 +4663,24 @@ function render() {
     if (texX < 0) texX = 0; if (texX >= TEX_SIZE) texX = TEX_SIZE-1;
 
     const fog = fogCurve(perpDist / MAX_DEPTH);
-    const shadeFactor = side === 0 ? 1.0 : 0.72;
+    let shadeFactor = side === 0 ? 1.0 : 0.72;
+
+    // ── ILLUSION DE CUBE 3D (haies) : l'éclairage horizontal simule le volume.
+    // wallX va de 0 à 1 sur la largeur de la case. On assombrit les bords
+    // (arêtes du bloc) et on éclaire le centre (face tournée vers la lumière).
+    let cubeTopBevel = 0;      // hauteur relative du biseau lumineux au sommet
+    if (theme.name === 'buissons') {
+      const e = 0.16;                       // largeur des arêtes sombres
+      let edge = 1;
+      if (wallX < e)        edge = 0.55 + 0.45 * (wallX / e);       // arête gauche
+      else if (wallX > 1-e) edge = 0.55 + 0.45 * ((1 - wallX) / e); // arête droite
+      // Face éclairée : léger dôme lumineux au centre (lumière frontale)
+      const centre = 1 - Math.abs(wallX - 0.5) * 0.5;
+      shadeFactor *= edge * (0.86 + 0.14 * centre);
+      // Les faces vues de biais (côté) sont un peu plus sombres → relief
+      if (side === 1) shadeFactor *= 0.94;
+      cubeTopBevel = 0.14;   // 14 % du haut recevra un liseré clair
+    }
 
     const top = wallTop < 0 ? 0 : wallTop;
     const bottom = wallBottom > H ? H : wallBottom;
@@ -4685,9 +4705,15 @@ function render() {
 
       if (alpha <= 0.02) continue;  // pixel totalement transparent → on garde le fond
 
-      const tr = (texData[iA]  *(1-tdy) + texData[iB]  *tdy) * shadeFactor;
-      const tg = (texData[iA+1]*(1-tdy) + texData[iB+1]*tdy) * shadeFactor;
-      const tb = (texData[iA+2]*(1-tdy) + texData[iB+2]*tdy) * shadeFactor;
+      // Biseau lumineux au sommet du bloc (arête taillée qui prend la lumière)
+      let lit = shadeFactor;
+      if (cubeTopBevel > 0) {
+        const vy = (y - wallTop) / wallH;          // 0 en haut, 1 en bas
+        if (vy < cubeTopBevel) lit *= 1 + 0.5 * (1 - vy / cubeTopBevel);
+      }
+      const tr = (texData[iA]  *(1-tdy) + texData[iB]  *tdy) * lit;
+      const tg = (texData[iA+1]*(1-tdy) + texData[iB+1]*tdy) * lit;
+      const tb = (texData[iA+2]*(1-tdy) + texData[iB+2]*tdy) * lit;
       // Couleur du mur avec brouillard
       const wr = tr + (fr-tr)*fog;
       const wg = tg + (fg-tg)*fog;
