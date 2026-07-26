@@ -793,6 +793,49 @@ const mmCtx    = mmCanvas.getContext('2d');
 let MAP, COLS, ROWS;
 let px, py, pAngle;    // player position (float) and angle
 let exitX, exitY;
+// ── Bonus caché : un objet posé au sol dans un cul-de-sac loin du chemin ──
+let hiddenBonus = null;   // { x, y, key } ou null si déjà ramassé
+function placeHiddenBonus() {
+  hiddenBonus = null;
+  if (bonusMode) return;   // pas dans les modes bonus (Sprint/Nuit/Infini)
+
+  // 1. Chemin le plus court départ → sortie (cases à éviter)
+  const onPath = new Set();
+  const sp = (typeof shortestPathBetween === 'function')
+    ? shortestPathBetween(1, 1, exitX, exitY) : null;
+  if (sp) sp.forEach(c => onPath.add(c.y * COLS + c.x));
+
+  // 2. Lister les culs-de-sac (une seule ouverture) hors du chemin
+  const deadends = [];
+  for (let y = 1; y < ROWS - 1; y++) {
+    for (let x = 1; x < COLS - 1; x++) {
+      if (MAP[y*COLS + x] === 0) continue;                 // mur
+      if (onPath.has(y*COLS + x)) continue;                // sur le chemin : pas caché
+      if (x === 1 && y === 1) continue;                    // départ
+      if (x === exitX && y === exitY) continue;            // sortie
+      let openN = 0;
+      if (MAP[(y-1)*COLS + x]) openN++;
+      if (MAP[(y+1)*COLS + x]) openN++;
+      if (MAP[y*COLS + x-1])   openN++;
+      if (MAP[y*COLS + x+1])   openN++;
+      if (openN === 1) {                                   // cul-de-sac
+        const distToStart = Math.abs(x-1) + Math.abs(y-1);
+        deadends.push({ x, y, d: distToStart });
+      }
+    }
+  }
+  if (!deadends.length) return;
+
+  // 3. Choisir un cul-de-sac plutôt éloigné du départ (vraie récompense d'explo)
+  deadends.sort((a, b) => b.d - a.d);
+  const pick = deadends[(Math.random() * Math.min(deadends.length, 5)) | 0];
+
+  // 4. Objet tiré au sort parmi les bonus (hors "map" trop peu fun à trouver)
+  const pool = ITEM_KEYS.filter(k => k !== 'map');
+  const key = pool[(Math.random() * pool.length) | 0];
+  hiddenBonus = { x: pick.x, y: pick.y, key };
+}
+
 let running = false;
 let paused = false;
 let level = 1, moves = 0;
@@ -1481,6 +1524,7 @@ function init(keepLevel=false, forceLevel=null, mode=undefined) {
   MAP  = buildMaze(COLS, ROWS);
   px = 1.5; py = 1.5; pAngle = 0;
   exitX = COLS-2; exitY = ROWS-2;
+  placeHiddenBonus();   // un cadeau surprise dans un recoin à l'écart du chemin
   moves = 0; elapsed = 0;
   continuesUsed = 0;   // nouveau niveau = continuations remises à zéro
   dailyMode = false;   // partie normale, pas le défi
@@ -4742,6 +4786,7 @@ function render() {
   drawPlants3D(zBuf);
 
   drawExitArch(exitDistByCol);
+  drawHiddenBonus(zBuf);
 
   // ── Overlay effects (cheap vector draws on top) ─────────────────────
   updateAnts();
@@ -5020,6 +5065,17 @@ function tryMove(nx, ny) {
     tutoOnFirstMove();      // didacticiel : 1er déplacement
     tutoCheckNearExit();    // didacticiel : proximité de la sortie
     // check exit
+    // Bonus caché : ramassé en marchant dessus
+    if (hiddenBonus && Math.floor(px)===hiddenBonus.x && Math.floor(py)===hiddenBonus.y) {
+      const d = loadItems();
+      d[hiddenBonus.key] = (d[hiddenBonus.key]||0) + 1;
+      saveItems(d);
+      refreshItemBar();
+      const it = ITEMS[hiddenBonus.key];
+      showToast(`${it.emoji} Trésor caché : ${it.name} !`, 2200);
+      sfxWin();
+      hiddenBonus = null;
+    }
     if (Math.floor(px)===exitX && Math.floor(py)===exitY) winGame();
   }
 }
@@ -5965,6 +6021,60 @@ function refreshItemBar() {
   });
 }
 
+// Dessine le bonus caché posé au sol (objet flottant lumineux)
+function drawHiddenBonus(zBuf) {
+  if (!hiddenBonus) return;
+  const tx = hiddenBonus.x + 0.5, ty = hiddenBonus.y + 0.5;
+  const dx = tx - px, dy = ty - py;
+  const dist = Math.hypot(dx, dy);
+  if (dist < 0.15 || dist > MAX_DEPTH) return;
+
+  let rel = Math.atan2(dy, dx) - pAngle;
+  while (rel > Math.PI) rel -= Math.PI*2;
+  while (rel < -Math.PI) rel += Math.PI*2;
+  if (Math.abs(rel) > HALF_FOV + 0.3) return;
+
+  const perp = dist * Math.cos(rel);
+  if (perp < 0.2) return;
+
+  // Occlusion : caché derrière un mur ?
+  const sx = (0.5 + rel/FOV) * W;
+  const zcol = Math.floor(sx / W * NUM_RAYS);
+  if (zBuf && zcol >= 0 && zcol < NUM_RAYS && zBuf[zcol] < perp - 0.1) return;
+
+  const unitH = H / perp;
+  const t = performance.now() / 1000;
+  const bob = Math.sin(t * 3) * unitH * 0.03;          // flottement doux
+  const sy = H/2 + unitH * 0.28 + bob;                 // un peu au-dessus du sol
+  const size = unitH * 0.13;
+
+  const it = ITEMS[hiddenBonus.key];
+
+  ctx.save();
+  // Halo lumineux pulsant (attire l'œil quand on passe à côté)
+  const pulse = 0.6 + 0.4 * Math.sin(t * 4);
+  const halo = ctx.createRadialGradient(sx, sy, 0, sx, sy, size * 1.8);
+  halo.addColorStop(0, `rgba(255,240,150,${0.5 * pulse})`);
+  halo.addColorStop(1, 'rgba(255,240,150,0)');
+  ctx.fillStyle = halo;
+  ctx.fillRect(sx - size*2, sy - size*2, size*4, size*4);
+
+  // Socle brillant au sol
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = 'rgba(255,230,120,0.6)';
+  ctx.beginPath();
+  ctx.ellipse(sx, sy + size*0.7, size*0.9, size*0.3, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // L'objet lui-même (emoji)
+  ctx.globalAlpha = 1;
+  ctx.font = `${size*1.6}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(it.emoji, sx, sy);
+  ctx.restore();
+}
+
 // Dessine la boussole et le fil d'Ariane (appelés dans render)
 function drawItemEffects() {
   // ── Boussole : flèche vers la sortie ──
@@ -6076,6 +6186,39 @@ function drawItemEffects() {
 }
 
 // BFS : plus court chemin de la case du joueur à la sortie (liste de cases)
+function shortestPathBetween(startX, startY, goalX, goalY) {
+  const key = (x,y) => y*COLS + x;
+  if (startX === goalX && startY === goalY) return [{x:startX, y:startY}];
+  const prev = new Map();
+  const seen = new Uint8Array(COLS*ROWS);
+  const q = [[startX, startY]];
+  seen[key(startX,startY)] = 1;
+  const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+  let found = false;
+  while (q.length) {
+    const [cx, cy] = q.shift();
+    if (cx === goalX && cy === goalY) { found = true; break; }
+    for (const [dx, dy] of DIRS) {
+      const nx = cx+dx, ny = cy+dy;
+      if (nx<0||ny<0||nx>=COLS||ny>=ROWS) continue;
+      if (MAP[ny*COLS+nx] === 0) continue;
+      const k = key(nx,ny);
+      if (seen[k]) continue;
+      seen[k] = 1; prev.set(k, key(cx,cy)); q.push([nx,ny]);
+    }
+  }
+  if (!found) return null;
+  const path = [];
+  let k = key(goalX, goalY);
+  while (k !== undefined) {
+    path.push({ x: k % COLS, y: Math.floor(k / COLS) });
+    if (k === key(startX, startY)) break;
+    k = prev.get(k);
+  }
+  path.reverse();
+  return path;
+}
+
 function shortestPathToExit() {
   const sx = Math.floor(px), sy = Math.floor(py);
   const ex = exitX, ey = exitY;
