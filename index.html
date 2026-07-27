@@ -1582,6 +1582,8 @@ function init(keepLevel=false, forceLevel=null, mode=undefined) {
   tutoOnLevelStart(level);   // didacticiel contextuel
   lastTickSecond = -1;
   threadPath = [];
+  visitedCells = new Set();
+  marksActive = 0;
   compassActive = 0;
   threadActive = 0;
   refreshItemBar();
@@ -4787,6 +4789,7 @@ function render() {
 
   drawExitArch(exitDistByCol);
   drawHiddenBonus(zBuf);
+  drawVisitedMarks(zBuf);
 
   // ── Overlay effects (cheap vector draws on top) ─────────────────────
   updateAnts();
@@ -5061,6 +5064,7 @@ function tryMove(nx, ny) {
     // Mémorise le chemin (pour le fil d'Ariane)
     threadPath.push({ x: px, y: py });
     if (threadPath.length > 400) threadPath.shift();
+    visitedCells.add(Math.floor(py) * COLS + Math.floor(px));   // pour le bonus « déjà passé »
     sfxStep();              // bruit de pas
     tutoOnFirstMove();      // didacticiel : 1er déplacement
     tutoCheckNearExit();    // didacticiel : proximité de la sortie
@@ -5519,15 +5523,17 @@ vp.addEventListener('touchcancel', () => {
 }, { passive: true });
 
 // Appliqué à chaque frame dans processInput() via cette fonction
-const DRAG_DEAD_ZONE = 12;   // px avant que le glissement ne déclenche un mouvement
-const DRAG_TURN_MAX  = 90;   // px de glissement horizontal pour la vitesse de rotation max
+const DRAG_DEAD_ZONE = 22;   // px avant rotation : évite de tourner au moindre toucher
+const DRAG_TURN_MAX  = 160;  // course plus longue = rotation plus progressive et contrôlable
 const DRAG_MOVE_MAX  = 70;   // px de glissement vertical pour la vitesse d'avance max
 
 function applyTouchDrag() {
   if (!dragActive) return;
   if (Math.abs(dragDX) > DRAG_DEAD_ZONE) {
-    const t = Math.max(-1, Math.min(1, dragDX / DRAG_TURN_MAX));
-    pAngle += t * TURN_SPEED * 1.6;
+    let t = Math.max(-1, Math.min(1, dragDX / DRAG_TURN_MAX));
+    // Courbe douce : petits mouvements = rotation très fine, grands = plus rapide
+    t = Math.sign(t) * t * t;
+    pAngle += t * TURN_SPEED * 1.3;
     tutoOnFirstTurn();   // didacticiel : 1ère rotation
   }
   if (Math.abs(dragDY) > DRAG_DEAD_ZONE) {
@@ -5687,6 +5693,7 @@ const ITEMS = {
   map:     { emoji: '🗺️', name: 'Carte',       desc: 'Révèle la carte 20s',          color: '#d98cb3', rarity: 3 },
   compass: { emoji: '🧭', name: 'Boussole',    desc: 'Direction de la sortie 15s',   color: '#6dbd8a', rarity: 4 },
   thread:  { emoji: '👣', name: 'Fil d\'Ariane', desc: 'Trace ton chemin 20s',       color: '#a3d9b8', rarity: 4 },
+  marks:   { emoji: '✋', name: 'Marques',     desc: 'Marque les chemins déjà pris 30s', color: '#e8c4f0', rarity: 4 },
 };
 const ITEM_KEYS = Object.keys(ITEMS);
 
@@ -5904,6 +5911,8 @@ function showChestReward(r) {
 let compassActive = 0;      // frames restantes
 let threadActive = 0;
 let threadPath = [];        // positions visitées
+let visitedCells = new Set();   // cases déjà traversées (bonus « déjà passé »)
+let marksActive = 0;            // frames restantes du bonus marques
 
 function useHammer() {
   if (dailyMode) { showToast('❌ Pas d\'objets sur le défi du jour', 2000); return; }
@@ -5977,12 +5986,22 @@ function useThread() {
   refreshItemBar();
 }
 
+function useMarks() {
+  if (dailyMode) { showToast('❌ Pas d\'objets sur le défi du jour', 2000); return; }
+  if (!useItem('marks')) return;
+  marksActive = 30 * 60;
+  showToast('✋ <b style="color:#e8c4f0">Marques 30s</b> — les chemins déjà pris sont marqués', 2200);
+  sfxClick();
+  refreshItemBar();
+}
+
 const ITEM_ACTIONS = {
   hammer: useHammer,
   clock: useClock,
   map: useMapItem,
   compass: useCompass,
   thread: useThread,
+  marks: useMarks,
 };
 
 // Barre d'objets en bas de l'écran
@@ -6022,6 +6041,65 @@ function refreshItemBar() {
 }
 
 // Dessine le bonus caché posé au sol (objet flottant lumineux)
+// Bonus « Marques » : dessine une empreinte de main à la craie sur les murs
+// qui bordent une case déjà traversée → on repère les couloirs déjà explorés.
+function drawVisitedMarks(zBuf) {
+  if (marksActive <= 0) return;
+  marksActive--;
+  const fade = marksActive < 90 ? marksActive / 90 : 1;
+
+  // Pour chaque case visitée proche et devant nous, marquer ses murs adjacents
+  const pcx = Math.floor(px), pcy = Math.floor(py);
+  const R = 6;
+  for (let cy = pcy - R; cy <= pcy + R; cy++) {
+    for (let cx = pcx - R; cx <= pcx + R; cx++) {
+      if (cx < 0 || cy < 0 || cx >= COLS || cy >= ROWS) continue;
+      if (!visitedCells.has(cy * COLS + cx)) continue;   // case non visitée
+      if (MAP[cy*COLS + cx] === 0) continue;             // c'est un mur
+
+      // Les 4 murs autour de cette case
+      const neigh = [[cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]];
+      for (const [wx, wy] of neigh) {
+        if (wx<0||wy<0||wx>=COLS||wy>=ROWS) continue;
+        if (MAP[wy*COLS + wx] !== 0) continue;   // pas un mur → pas de marque
+
+        // Point sur la face du mur, côté de la case visitée
+        const mx = (wx + cx) / 2 + 0.5;
+        const my = (wy + cy) / 2 + 0.5;
+        const dx = mx - px, dy = my - py;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 0.3 || dist > R) continue;
+
+        let rel = Math.atan2(dy, dx) - pAngle;
+        while (rel > Math.PI) rel -= Math.PI*2;
+        while (rel < -Math.PI) rel += Math.PI*2;
+        if (Math.abs(rel) > HALF_FOV) continue;
+
+        const perp = dist * Math.cos(rel);
+        if (perp < 0.3) continue;
+
+        const sx = (0.5 + rel/FOV) * W;
+        const zcol = Math.floor(sx / W * NUM_RAYS);
+        // On veut que la marque soit SUR le mur : le mur doit être à ~perp
+        if (zBuf && zcol >= 0 && zcol < NUM_RAYS && Math.abs(zBuf[zcol] - perp) > 0.6) continue;
+
+        const unitH = H / perp;
+        const sy = H/2;                       // milieu du mur
+        const size = unitH * 0.12;
+
+        ctx.save();
+        ctx.globalAlpha = 0.55 * fade;
+        ctx.font = `${size*1.4}px serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('✋', sx, sy);
+        ctx.restore();
+      }
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
 function drawHiddenBonus(zBuf) {
   if (!hiddenBonus) return;
   const tx = hiddenBonus.x + 0.5, ty = hiddenBonus.y + 0.5;
