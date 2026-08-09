@@ -214,6 +214,93 @@ function butterflyTex(c1,c2){
 
 const GT={}, CLOUD={}, PUFF={}, SKYL={}, CT={}, BFLY=[];
 
+
+// ── Effets de bonus : empreintes du fil d'Ariane, main à la craie ──
+function footTex(){
+  const S=128,c=document.createElement('canvas');c.width=c.height=S;
+  const g=c.getContext('2d');g.clearRect(0,0,S,S);
+  const foot=(cxp,cyp,sc)=>{
+    g.save();g.translate(cxp,cyp);g.scale(sc,sc);
+    g.fillStyle='#00d0ff';
+    g.beginPath();g.ellipse(0,6,13,20,0,0,7);g.fill();          // plante
+    g.beginPath();g.ellipse(0,-16,10,9,0,0,7);g.fill();          // avant-pied
+    for(let i=0;i<4;i++){g.beginPath();
+      g.ellipse(-9+i*6,-27,2.6,3.4,0,0,7);g.fill();}             // orteils
+    g.fillStyle='rgba(190,245,255,.85)';
+    g.beginPath();g.ellipse(-2,2,7,12,0,0,7);g.fill();
+    g.restore();
+  };
+  foot(42,44,1);foot(88,84,1);
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;
+}
+function handTex(){
+  const S=128,c=document.createElement('canvas');c.width=c.height=S;
+  const g=c.getContext('2d');g.clearRect(0,0,S,S);
+  g.strokeStyle='rgba(255,255,255,.92)';g.lineWidth=7;g.lineCap='round';
+  g.lineJoin='round';
+  g.beginPath();                                   // paume
+  g.moveTo(40,104);g.lineTo(38,66);g.quadraticCurveTo(40,52,54,52);
+  g.lineTo(84,52);g.quadraticCurveTo(96,54,94,68);g.lineTo(92,104);
+  g.closePath();g.stroke();
+  for(let i=0;i<4;i++){                            // doigts
+    const x=44+i*14;
+    g.beginPath();g.moveTo(x,54);g.lineTo(x,26+((i===1||i===2)?-6:4));g.stroke();
+  }
+  g.beginPath();g.moveTo(40,76);g.lineTo(20,58);g.stroke();      // pouce
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;
+}
+let FOOT=null, HAND=null;
+let threadGroup=null, marksGroup=null, lastThreadCell='', lastMarkCell='';
+
+// Empreintes lumineuses posées sur le chemin le plus court vers la sortie
+function buildThread(){
+  if(threadGroup){scene.remove(threadGroup);threadGroup=null;}
+  const g=G(); if(!g) return;
+  const path = g.pathToExit ? g.pathToExit() : null;
+  if(!path || path.length<2) return;
+  const grp=new THREE.Group();
+  const n=Math.min(path.length,14);
+  const mat=new THREE.MeshBasicMaterial({map:FOOT,transparent:true,
+    depthWrite:false,fog:false,opacity:1});
+  for(let i=1;i<n;i++){
+    const cell=path[i];
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(CELL*0.5,CELL*0.5),mat.clone());
+    m.material.opacity=0.95-(i/n)*0.55;
+    m.rotation.x=-Math.PI/2;
+    const prev=path[i-1];
+    m.rotation.z=Math.atan2(cell.x-prev.x, cell.y-prev.y);
+    m.position.set(cx(cell.x), 0.05, cz(cell.y));
+    grp.add(m);
+  }
+  scene.add(grp);threadGroup=grp;
+}
+// Mains à la craie sur les murs des couloirs déjà parcourus
+function buildMarks(){
+  if(marksGroup){scene.remove(marksGroup);marksGroup=null;}
+  const g=G(); if(!g||!g.visitedCells) return;
+  const grp=new THREE.Group();
+  const pc=Math.floor(g.px), pr=Math.floor(g.py);
+  const R=6;
+  const mat=new THREE.MeshBasicMaterial({map:HAND,transparent:true,
+    depthWrite:false,fog:true,opacity:.75});
+  for(let r=pr-R;r<=pr+R;r++)for(let c=pc-R;c<=pc+R;c++){
+    if(r<0||c<0||r>=g.ROWS||c>=g.COLS) continue;
+    if(isWall(r,c)) continue;
+    if(!g.visitedCells.has(r*g.COLS+c)) continue;
+    // une main sur chaque mur bordant cette case visitée
+    const dirs=[[-1,0,0],[1,0,Math.PI],[0,-1,Math.PI/2],[0,1,-Math.PI/2]];
+    for(const [dr,dc,ry] of dirs){
+      if(!isWall(r+dr,c+dc)) continue;
+      if(rnd(r,c,(dr+2)*7+(dc+2)*13)>0.55) continue;   // pas sur tous les murs
+      const m=new THREE.Mesh(new THREE.PlaneGeometry(CELL*0.34,CELL*0.34),mat);
+      m.position.set(cx(c)+dc*(CELL/2-0.06), 1.35, cz(r)+dr*(CELL/2-0.06));
+      m.rotation.y=ry+Math.PI;
+      grp.add(m);
+    }
+  }
+  scene.add(grp);marksGroup=grp;
+}
+
 // ── Préparation des modèles ────────────────────────────────────────
 function prep(key,mode,snug,sink,size){
   const src=RAW[key];if(!src)return null;
@@ -474,6 +561,9 @@ export function buildLevel(){
   skyline.visible = (curTheme==='briques');
   rebuildProtos(curTheme);
   clearWorld();
+  if(threadGroup){scene.remove(threadGroup);threadGroup=null;}
+  if(marksGroup){scene.remove(marksGroup);marksGroup=null;}
+  lastThreadCell='';lastMarkCell='';
   applyWeather();
   updateZone();
   spawnCritters();
@@ -515,6 +605,16 @@ export function render(){
     rainPts.position.set(wx,0,wz);
   }
   updateCritters(wx,wz);
+
+  // ── effets des bonus ──
+  const cellKey=Math.floor(g.px)+','+Math.floor(g.py);
+  if(g.threadActive>0){
+    if(cellKey!==lastThreadCell){ lastThreadCell=cellKey; buildThread(); }
+  } else if(threadGroup){ scene.remove(threadGroup); threadGroup=null; lastThreadCell=''; }
+  if(g.marksActive>0){
+    if(cellKey!==lastMarkCell){ lastMarkCell=cellKey; buildMarks(); }
+  } else if(marksGroup){ scene.remove(marksGroup); marksGroup=null; lastMarkCell=''; }
+
   renderer.render(scene,camera);
   return true;
 }
@@ -540,6 +640,7 @@ export async function init(canvas){
   CLOUD.clair=cloudTex(false);CLOUD.sombre=cloudTex(true);
   PUFF.clair=puffTex(false);PUFF.sombre=puffTex(true);
   SKYL.clair=skylineTex(false);SKYL.sombre=skylineTex(true);
+  FOOT=footTex();HAND=handTex();
   CT.ant=critterTex('ant');CT.rat=critterTex('rat');CT.bird=critterTex('bird');
   BFLY.push(butterflyTex('#f5a623','#e8741e'),butterflyTex('#6ec6f0','#3f8fd0'),
             butterflyTex('#f2e06a','#e2b33c'));
