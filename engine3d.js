@@ -12,8 +12,8 @@ const WALL_H = 2.9;      // hauteur des murs
 const EYE    = 1.62;     // hauteur des yeux
 const THICK  = 0.30;     // épaisseur d'un panneau de brique
 const SINK   = 0.05;     // enfoncement du maïs
-const LAYERS = 2;        // plants de maïs empilés par case
-const SNUG   = { 'briques':1.04, 'buissons':1.30, 'maïs':1.85 };
+const LAYERS = 3;        // plants de maïs empilés par case (compense le débord réduit)
+const SNUG   = { 'briques':1.04, 'buissons':1.22, 'maïs':1.14 };
 
 const G = () => window.GAME3D;
 
@@ -295,7 +295,7 @@ function cellContent(r,c){
       const cp=P.corn.clone();
       cp.rotation.y=rnd(r,c,31+L*17)*Math.PI*2;
       cp.scale.multiplyScalar(1-L*.04);
-      cp.position.set((rnd(r,c,61+L*7)-.5)*CELL*.22,0,(rnd(r,c,83+L*7)-.5)*CELL*.22);
+      cp.position.set((rnd(r,c,61+L*7)-.5)*CELL*.30,0,(rnd(r,c,83+L*7)-.5)*CELL*.30);
       m.add(cp);
     }
     m.position.set(x,0,z);grp.add(m);return grp;
