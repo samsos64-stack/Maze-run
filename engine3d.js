@@ -29,8 +29,8 @@ let started = false;
 const rnd = (r,c,s)=>{ let h=(r*374761393+c*668265263+s*2246822519)^0x5bf03635;
   h=Math.imul(h^(h>>>13),1274126177); return ((h^(h>>>16))>>>0)/4294967295; };
 // ATTENTION : dans le jeu, MAP vaut 0 pour un MUR et non-zéro pour un couloir
-const isWall = (r,c)=>{ const g=G(); if(!g) return true;
-  if(r<0||c<0||r>=g.ROWS||c>=g.COLS) return true;
+const isWall = (r,c)=>{ const g=G(); if(!g||!g.MAP||!g.COLS) return true;
+  if(!(r>=0)||!(c>=0)||r>=g.ROWS||c>=g.COLS) return true;
   return g.MAP[r*g.COLS+c]===0; };
 const cx = c => (c+0.5)*CELL;
 const cz = r => (r+0.5)*CELL;
@@ -84,8 +84,8 @@ function groundTex(kind){
       g.beginPath();g.ellipse(x,y,r,r*.75,Math.random()*3,0,7);g.fill();}
   }
   const t=new THREE.CanvasTexture(c);
-  t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(40,40);
-  t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;return t;
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(150,150);   // sol de 600 m → tuile de 4 m
+  t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;return t;
 }
 function cloudTex(dark){
   const S=512,c=document.createElement('canvas');c.width=c.height=S;
@@ -102,7 +102,7 @@ function cloudTex(dark){
       g.fillStyle=gr;g.beginPath();g.arc(x+ox,y+oy,r,0,7);g.fill();}
   }
   const t=new THREE.CanvasTexture(c);
-  t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(2,2);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(9,9);   // sinon les nuages sont étirés à l'infini
   t.colorSpace=THREE.SRGBColorSpace;return t;
 }
 function puffTex(dark){
@@ -355,7 +355,7 @@ function spawnCritters(){
   clearCritters();
   const g=G(); if(!g) return;
   const nature=(curTheme!=='briques'), rain=(curWeather==='rain');
-  const kind=nature?'ant':'rat', size=nature?0.20:0.46, n=nature?12:7;
+  const kind=nature?'ant':'rat', size=nature?0.26:0.55, n=nature?14:8;
   for(let i=0;i<n;i++){
     let obj;
     if(nature){
@@ -441,14 +441,14 @@ function applyWeather(){
   const sky=rain?0x8c97a6:0x87CEEB;
   scene.background=new THREE.Color(sky);
   const far=Math.min(radius*CELL-CELL*1.15, (g.MAX_DEPTH||20)*CELL);
-  scene.fog=new THREE.Fog(sky, far*(rain?0.30:0.40), far*(rain?0.85:1.0));
+  scene.fog=new THREE.Fog(sky, far*(rain?0.45:0.58), far*(rain?0.90:1.0));
   sun.intensity=rain?.55:1.2; hemi.intensity=rain?.8:1.0;
   cloudMat.map=rain?CLOUD.sombre:CLOUD.clair; cloudMat.needsUpdate=true;
-  cloudLayer.position.y=rain?24:32;
+  cloudLayer.position.y=rain?20:26;
   skyMat.map=rain?SKYL.sombre:SKYL.clair; skyMat.needsUpdate=true;
   rainPts.visible=rain;
   puffs.forEach(p=>{p.obj.material.map=rain?PUFF.sombre:PUFF.clair;
-    p.obj.material.needsUpdate=true;p.h=rain?13+Math.random()*10:17+Math.random()*15;});
+    p.obj.material.needsUpdate=true;p.h=rain?11+Math.random()*8:15+Math.random()*12;});
 }
 
 // ── Cycle de vie ───────────────────────────────────────────────────
@@ -478,7 +478,9 @@ export function render(){
 
   const wx=g.px*CELL, wz=g.py*CELL;
   const key=Math.floor(g.px)+','+Math.floor(g.py);
-  if(key!==lastCell){ lastCell=key; updateZone(); }
+  // scène vide alors qu'une partie tourne : le niveau a démarré avant le moteur
+  if(live.size===0 && g.MAP && g.COLS){ buildLevel(); }
+  else if(key!==lastCell){ lastCell=key; updateZone(); }
 
   camera.position.set(wx, EYE, wz);
   camera.rotation.set(0, -g.pAngle-Math.PI/2, 0, 'YXZ');
@@ -538,7 +540,7 @@ export async function init(canvas){
   cloudMat=new THREE.MeshBasicMaterial({map:CLOUD.clair,transparent:true,
     depthWrite:false,fog:false,side:THREE.DoubleSide});
   cloudLayer=new THREE.Mesh(new THREE.PlaneGeometry(420,420),cloudMat);
-  cloudLayer.rotation.x=Math.PI/2;cloudLayer.position.y=32;scene.add(cloudLayer);
+  cloudLayer.rotation.x=Math.PI/2;cloudLayer.position.y=26;scene.add(cloudLayer);
 
   skyMat=new THREE.MeshBasicMaterial({map:SKYL.clair,transparent:true,
     side:THREE.BackSide,depthWrite:false,fog:false});
@@ -548,10 +550,10 @@ export async function init(canvas){
   for(let i=0;i<14;i++){
     const s=new THREE.Sprite(new THREE.SpriteMaterial({map:PUFF.clair,transparent:true,
       depthWrite:false,fog:false,opacity:.9}));
-    const size=16+Math.random()*26;s.scale.set(size,size*0.55,1);s.renderOrder=-10;
+    const size=22+Math.random()*34;s.scale.set(size,size*0.55,1);s.renderOrder=-10;
     scene.add(s);
     puffs.push({obj:s,a:Math.random()*6.28,r:34+Math.random()*70,
-      h:17+Math.random()*15,sp:0.00006+Math.random()*0.00009,size});
+      h:15+Math.random()*12,sp:0.00006+Math.random()*0.00009,size});
   }
 
   const RN=460;
