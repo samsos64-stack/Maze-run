@@ -303,7 +303,18 @@ function cellContent(r,c){
 
   // ── case libre ──
   if(r===g.exitY && c===g.exitX && P.fin){
-    const f=P.fin.clone();f.position.set(x, WALL_H*.98-f.userData.h, z);grp.add(f);
+    const f=P.fin.clone();
+    // L'arche doit BARRER le couloir d'accès, pas le longer : on regarde
+    // par où le joueur peut arriver et on l'oriente face à lui.
+    const nsOpen = !isWall(r-1,c) || !isWall(r+1,c);   // couloir nord-sud
+    const ewOpen = !isWall(r,c-1) || !isWall(r,c+1);   // couloir est-ouest
+    let ry;
+    if(nsOpen && !ewOpen)      ry = 0;                 // on arrive selon Z
+    else if(ewOpen && !nsOpen) ry = Math.PI/2;         // on arrive selon X
+    else ry = (Math.abs(1-c) > Math.abs(1-r)) ? Math.PI/2 : 0;  // croisement : face au départ
+    f.rotation.y = ry;
+    f.position.set(x, WALL_H*.98-f.userData.h, z);
+    grp.add(f);
   }
   const hb=g.hiddenBonus;
   if(hb && hb.x===c && hb.y===r && P.cof){
