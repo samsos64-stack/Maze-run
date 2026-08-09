@@ -219,37 +219,80 @@ const GT={}, CLOUD={}, PUFF={}, SKYL={}, CT={}, BFLY=[];
 function footTex(){
   const S=128,c=document.createElement('canvas');c.width=c.height=S;
   const g=c.getContext('2d');g.clearRect(0,0,S,S);
-  const foot=(cxp,cyp,sc)=>{
-    g.save();g.translate(cxp,cyp);g.scale(sc,sc);
+  // Pied vu de dessus, orteils vers le HAUT du canvas
+  const foot=(ox,oy,mir)=>{
+    g.save();g.translate(ox,oy);g.scale(mir,1);
     g.fillStyle='#00d0ff';
-    g.beginPath();g.ellipse(0,6,13,20,0,0,7);g.fill();          // plante
-    g.beginPath();g.ellipse(0,-16,10,9,0,0,7);g.fill();          // avant-pied
-    for(let i=0;i<4;i++){g.beginPath();
-      g.ellipse(-9+i*6,-27,2.6,3.4,0,0,7);g.fill();}             // orteils
-    g.fillStyle='rgba(190,245,255,.85)';
-    g.beginPath();g.ellipse(-2,2,7,12,0,0,7);g.fill();
+    g.beginPath();g.ellipse(0,-9,7.5,10.5,0,0,7);g.fill();
+    g.beginPath();g.ellipse(-0.5,13,5,6.5,0,0,7);g.fill();
+    g.beginPath();g.moveTo(-4.5,-4);g.lineTo(4.5,-4);
+    g.lineTo(3.5,13);g.lineTo(-3.5,13);g.closePath();g.fill();
+    for(let i=0;i<4;i++){
+      g.beginPath();g.ellipse(-4.6+i*3.1,-20.5,1.5,2.1,0,0,7);g.fill();}
+    g.beginPath();g.ellipse(-6.4,-15,2.1,2.6,-0.3,0,7);g.fill();
+    g.fillStyle='rgba(200,248,255,.8)';
+    g.beginPath();g.ellipse(-1,-8,3.6,6,0,0,7);g.fill();
     g.restore();
   };
-  foot(42,44,1);foot(88,84,1);
+  foot(48,40,1);foot(80,80,-1);
   const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;
 }
-function handTex(){
-  const S=128,c=document.createElement('canvas');c.width=c.height=S;
+function handTex(variant){
+  const S=160,c=document.createElement('canvas');c.width=c.height=S;
   const g=c.getContext('2d');g.clearRect(0,0,S,S);
-  g.strokeStyle='rgba(255,255,255,.92)';g.lineWidth=7;g.lineCap='round';
-  g.lineJoin='round';
-  g.beginPath();                                   // paume
-  g.moveTo(40,104);g.lineTo(38,66);g.quadraticCurveTo(40,52,54,52);
-  g.lineTo(84,52);g.quadraticCurveTo(96,54,94,68);g.lineTo(92,104);
-  g.closePath();g.stroke();
-  for(let i=0;i<4;i++){                            // doigts
-    const x=44+i*14;
-    g.beginPath();g.moveTo(x,54);g.lineTo(x,26+((i===1||i===2)?-6:4));g.stroke();
+  const tint=['#f4f6f2','#eef2f6','#f6f2e8'][variant%3];
+  g.fillStyle=tint;
+
+  // ── paume ──
+  g.beginPath();
+  g.moveTo(48,124);
+  g.bezierCurveTo(39,104, 41,84, 48,70);
+  g.lineTo(110,70);
+  g.bezierCurveTo(119,84, 121,106, 112,124);
+  g.bezierCurveTo(99,139, 61,139, 48,124);
+  g.closePath();g.fill();
+
+  // ── doigts : capsules en éventail ──
+  const finger=(x,y,len,w,ang)=>{
+    g.save();g.translate(x,y);g.rotate(ang);
+    g.beginPath();
+    g.moveTo(-w/2,4);
+    g.lineTo(-w/2,-len+w/2);
+    g.arc(0,-len+w/2,w/2,Math.PI,0);
+    g.lineTo(w/2,4);
+    g.closePath();g.fill();
+    g.restore();
+  };
+  const sp=[0,0.06,-0.05][variant%3];
+  finger(60,74, 48,15.5, -0.20+sp);   // index
+  finger(80,72, 57,15.5, -0.05+sp);   // majeur
+  finger(99,74, 50,14.5,  0.10+sp);   // annulaire
+  finger(116,80,38,13,    0.32+sp);   // auriculaire
+  finger(44,100,44,16.5, -1.02+sp);   // pouce
+
+  // ── grain de craie : on creuse la matière ──
+  g.globalCompositeOperation='destination-out';
+  for(let i=0;i<2600;i++){
+    g.fillStyle='rgba(0,0,0,'+(0.12+Math.random()*0.55)+')';
+    g.beginPath();g.arc(Math.random()*S,Math.random()*S,0.5+Math.random()*1.7,0,7);g.fill();
   }
-  g.beginPath();g.moveTo(40,76);g.lineTo(20,58);g.stroke();      // pouce
+  // bords légèrement rongés
+  for(let i=0;i<180;i++){
+    g.fillStyle='rgba(0,0,0,'+(0.3+Math.random()*0.6)+')';
+    const a=Math.random()*6.28,rr=52+Math.random()*26;
+    g.beginPath();g.arc(80+Math.cos(a)*rr,100+Math.sin(a)*rr*0.9,1.5+Math.random()*4,0,7);g.fill();
+  }
+  g.globalCompositeOperation='source-over';
+
+  // ── poussière de craie autour ──
+  for(let i=0;i<90;i++){
+    g.fillStyle='rgba(246,248,244,'+(0.05+Math.random()*0.18)+')';
+    const a=Math.random()*6.28,rr=48+Math.random()*30;
+    g.beginPath();g.arc(80+Math.cos(a)*rr,100+Math.sin(a)*rr*0.9,0.6+Math.random()*2.2,0,7);g.fill();
+  }
   const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;
 }
-let FOOT=null, HAND=null;
+let FOOT=null; const HANDS=[];
 let threadGroup=null, marksGroup=null, lastThreadCell='', lastMarkCell='';
 
 // Empreintes lumineuses posées sur le chemin le plus court vers la sortie
@@ -264,13 +307,15 @@ function buildThread(){
     depthWrite:false,fog:false,opacity:1});
   for(let i=1;i<n;i++){
     const cell=path[i];
-    const m=new THREE.Mesh(new THREE.PlaneGeometry(CELL*0.5,CELL*0.5),mat.clone());
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(CELL*0.46,CELL*0.46),mat.clone());
     m.material.opacity=0.95-(i/n)*0.55;
-    m.rotation.x=-Math.PI/2;
+    m.material.side=THREE.DoubleSide;
+    m.rotation.x=-Math.PI/2;                    // couché : orteils vers -Z
     const prev=path[i-1];
-    m.rotation.z=Math.atan2(cell.x-prev.x, cell.y-prev.y);
-    m.position.set(cx(cell.x), 0.05, cz(cell.y));
-    grp.add(m);
+    const holder=new THREE.Group();holder.add(m);
+    holder.rotation.y=Math.atan2(-(cell.x-prev.x), -(cell.y-prev.y));
+    holder.position.set(cx(cell.x), 0.05, cz(cell.y));
+    grp.add(holder);
   }
   scene.add(grp);threadGroup=grp;
 }
@@ -281,8 +326,8 @@ function buildMarks(){
   const grp=new THREE.Group();
   const pc=Math.floor(g.px), pr=Math.floor(g.py);
   const R=6;
-  const mat=new THREE.MeshBasicMaterial({map:HAND,transparent:true,
-    depthWrite:false,fog:true,opacity:.75});
+  const mats=HANDS.map(h=>new THREE.MeshBasicMaterial({map:h,transparent:true,
+    depthWrite:false,opacity:.82,side:THREE.DoubleSide}));
   for(let r=pr-R;r<=pr+R;r++)for(let c=pc-R;c<=pc+R;c++){
     if(r<0||c<0||r>=g.ROWS||c>=g.COLS) continue;
     if(isWall(r,c)) continue;
@@ -291,9 +336,10 @@ function buildMarks(){
     const dirs=[[-1,0,0],[1,0,Math.PI],[0,-1,Math.PI/2],[0,1,-Math.PI/2]];
     for(const [dr,dc,ry] of dirs){
       if(!isWall(r+dr,c+dc)) continue;
-      if(rnd(r,c,(dr+2)*7+(dc+2)*13)>0.55) continue;   // pas sur tous les murs
-      const m=new THREE.Mesh(new THREE.PlaneGeometry(CELL*0.34,CELL*0.34),mat);
-      m.position.set(cx(c)+dc*(CELL/2-0.06), 1.35, cz(r)+dr*(CELL/2-0.06));
+      if(rnd(r,c,(dr+2)*7+(dc+2)*13)>0.78) continue;   // pas sur tous les murs
+      const vi=(rnd(r,c,(dr+5)*11+(dc+5)*3)*3)|0;
+      const m=new THREE.Mesh(new THREE.PlaneGeometry(CELL*0.34,CELL*0.34),mats[vi]);
+      m.position.set(cx(c)+dc*(CELL/2-0.16), 1.30, cz(r)+dr*(CELL/2-0.16));
       m.rotation.y=ry+Math.PI;
       grp.add(m);
     }
@@ -570,6 +616,15 @@ export function buildLevel(){
   lastCell = Math.floor(g.px)+','+Math.floor(g.py);
 }
 
+// Le labyrinthe a changé (mur cassé au marteau) : on refait la zone visible
+export function refresh(){
+  if(!started) return;
+  clearWorld();
+  updateZone();
+  if(threadGroup){ scene.remove(threadGroup); threadGroup=null; lastThreadCell=''; }
+  if(marksGroup){ scene.remove(marksGroup); marksGroup=null; lastMarkCell=''; }
+}
+
 export function render(){
   if(!started) return false;
   const g=G(); if(!g||!g.MAP) return false;
@@ -640,7 +695,7 @@ export async function init(canvas){
   CLOUD.clair=cloudTex(false);CLOUD.sombre=cloudTex(true);
   PUFF.clair=puffTex(false);PUFF.sombre=puffTex(true);
   SKYL.clair=skylineTex(false);SKYL.sombre=skylineTex(true);
-  FOOT=footTex();HAND=handTex();
+  FOOT=footTex();HANDS.push(handTex(0),handTex(1),handTex(2));
   CT.ant=critterTex('ant');CT.rat=critterTex('rat');CT.bird=critterTex('bird');
   BFLY.push(butterflyTex('#f5a623','#e8741e'),butterflyTex('#6ec6f0','#3f8fd0'),
             butterflyTex('#f2e06a','#e2b33c'));
