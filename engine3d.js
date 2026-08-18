@@ -23,6 +23,7 @@ const RAW = {}, TEX = {}, P = {};
 const live = new Map();
 const critters = [], puffs = [];
 let curTheme = null, curWeather = null, radius = 8, lastCell = '';
+let finishObj = null, finishLocked = false;   // arche d'arrivée orientée vers le joueur
 let started = false;
 
 // ── Utilitaires ────────────────────────────────────────────────────
@@ -394,6 +395,23 @@ function rebuildProtos(theme){
   P.spr  = prep('spray','prop',1,0,CELL*.2);
 }
 
+
+// L'arche d'arrivée se présente toujours de face au joueur.
+// On n'utilise que des quarts de tour (elle reste alignée sur le couloir),
+// et on fige l'orientation dès qu'il est proche : plus de pivot de dernière seconde.
+function aimFinish(wx, wz){
+  if(!finishObj) return;
+  const dx = wx - finishObj.userData.gx;
+  const dz = wz - finishObj.userData.gz;
+  const dist = Math.hypot(dx, dz);
+  if(dist < CELL*1.5){ finishLocked = true; return; }   // trop près : on ne bouge plus
+  finishLocked = false;
+  let ry;
+  if(Math.abs(dx) > Math.abs(dz)) ry = (dx > 0) ?  Math.PI/2 : -Math.PI/2;
+  else                            ry = (dz > 0) ?  0         :  Math.PI;
+  finishObj.rotation.y = ry;
+}
+
 // ── Contenu d'une case ─────────────────────────────────────────────
 function cellContent(r,c){
   const g=G(); if(!g) return null;
@@ -437,16 +455,15 @@ function cellContent(r,c){
   // ── case libre ──
   if(r===g.exitY && c===g.exitX && P.fin){
     const f=P.fin.clone();
-    // L'arche doit BARRER le couloir d'accès, pas le longer : on regarde
-    // par où le joueur peut arriver et on l'oriente face à lui.
-    const nsOpen = !isWall(r-1,c) || !isWall(r+1,c);   // couloir nord-sud
-    const ewOpen = !isWall(r,c-1) || !isWall(r,c+1);   // couloir est-ouest
-    let ry;
-    if(nsOpen && !ewOpen)      ry = 0;                 // on arrive selon Z
-    else if(ewOpen && !nsOpen) ry = Math.PI/2;         // on arrive selon X
-    else ry = (Math.abs(1-c) > Math.abs(1-r)) ? Math.PI/2 : 0;  // croisement : face au départ
-    f.rotation.y = ry;
+    // Sur un croisement, impossible de deviner par où le joueur arrivera :
+    // l'arche s'oriente donc VERS LUI à chaque image (voir aimFinish),
+    // puis se verrouille dès qu'il approche pour ne pas pivoter sous son nez.
+    const nsOpen = !isWall(r-1,c) || !isWall(r+1,c);
+    const ewOpen = !isWall(r,c-1) || !isWall(r,c+1);
+    f.rotation.y = (ewOpen && !nsOpen) ? Math.PI/2 : 0;   // orientation de départ
     f.position.set(x, WALL_H*.98-f.userData.h, z);
+    f.userData.gx = x; f.userData.gz = z;
+    finishObj = f;
     grp.add(f);
   }
   const hb=g.hiddenBonus;
@@ -491,7 +508,8 @@ function updateZone(){
   }
   for(const [k,o] of live){ if(!need.has(k)){ if(o) scene.remove(o); live.delete(k); } }
 }
-function clearWorld(){ for(const [,o] of live) if(o) scene.remove(o); live.clear(); }
+function clearWorld(){ for(const [,o] of live) if(o) scene.remove(o); live.clear();
+  finishObj = null; finishLocked = false; }
 
 // ── Animaux ────────────────────────────────────────────────────────
 function clearCritters(){ critters.forEach(o=>scene.remove(o.obj)); critters.length=0; }
@@ -660,6 +678,7 @@ export function render(){
     rainPts.position.set(wx,0,wz);
   }
   updateCritters(wx,wz);
+  aimFinish(wx,wz);
 
   // ── effets des bonus ──
   const cellKey=Math.floor(g.px)+','+Math.floor(g.py);
