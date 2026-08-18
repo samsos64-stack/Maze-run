@@ -9,6 +9,32 @@
   'use strict';
 
   const DICT = {
+    // ── Ajouts : coffre, défi du jour, aide, classement ──
+    "✕ Masquer": "✕ Hide",
+    "Masquer": "Hide",
+    "? Comment jouer": "? How to play",
+    "🎁 COFFRE DU JOUR": "🎁 DAILY CHEST",
+    "COFFRE DU JOUR": "DAILY CHEST",
+    "Coffre": "Chest",
+    "Ouvrir": "Open",
+    "3 objets": "3 items",
+    "2 objets": "2 items",
+    "1 objet": "1 item",
+    "Défi du jour": "Daily challenge",
+    "⭐ Relever le défi": "⭐ Take the challenge",
+    "Relever le défi": "Take the challenge",
+    "Un seul essai — bonne chance !": "One try only — good luck!",
+    "Termine ton premier niveau !": "Finish your first level!",
+    "Plus de continuation disponible pour ce niveau": "No more continues for this level",
+    "⚠️ Niveau 11 : la carte disparaît !": "⚠️ Level 11: the map disappears!",
+    "✨ TU AS GAGNÉ": "✨ YOU WIN",
+    "TU AS GAGNÉ": "YOU WIN",
+    "Explorez le labyrinthe en vue première personne et trouvez la":
+      "Explore the maze in first person and find the",
+    "ligne d'arrivée 🏁": "finish line 🏁",
+    "Classement": "Leaderboard",
+    "Aide": "Help",
+    "Aucun score enregistré.": "No score saved yet.",
     // ── Menu et navigation ──
     "Jouer": "Play",
     "Reprendre": "Resume",
@@ -121,7 +147,20 @@
 
   // Motifs pour les phrases contenant des nombres ou des noms variables
   const PATTERNS = [
-    [/\bNiveau\s+(\d+)/g,            "Level $1"],
+    [/Jouer\s+niveau\s+(\d+)/gi,  "Play level $1"],
+    [/\bNiveau\s+(\d+)/g,          "Level $1"],
+    [/\bniveau\s+(\d+)/g,          "level $1"],
+    [/Reviens demain/g,             "Come back tomorrow"],
+    [/\bsérie\b/g,                 "streak"],
+    [/Coffre déjà ouvert aujourd'hui/g, "Chest already opened today"],
+    [/Coffre quotidien/gi,          "Daily chest"],
+    [/Un seul essai/g,              "One try only"],
+    [/Pas d'aide sur le défi/g,     "No items in the challenge"],
+    [/Pas d'objets/g,               "No items"],
+    [/\bobjets?\b/g,               "items"],
+    [/\bessai\b/g,                 "try"],
+    [/\bdemain\b/g,                "tomorrow"],
+    [/\bRécompense\b/gi,           "Reward"],
     [/\bNiv\.?\s*(\d+)/g,            "Lvl $1"],
     [/\bNiv\b/g,                     "LVL"],
     [/(\d+)\s+pas\b/g,               "$1 steps"],
