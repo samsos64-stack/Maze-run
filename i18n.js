@@ -174,6 +174,7 @@
       return;
     }
     if (node.nodeType !== 1) return;
+    if (node.id === 'cmLangBtn' || (node.getAttribute && node.getAttribute('data-no-tr'))) return;
     const tag = node.tagName;
     if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'CANVAS') return;
     for (const a of ATTRS) {
@@ -210,25 +211,34 @@
     addLangButton();
   }
 
-  // ── Bouton de bascule, posé à côté des réglages Son / Musique ──
+  // ── Bouton de langue, dans le MENU PRINCIPAL uniquement ──
+  // (surtout pas dans le HUD de jeu : cette zone est recouverte par le canvas
+  //  qui capte les gestes de déplacement, les clics n'y arrivent jamais)
   function addLangButton() {
     if (document.getElementById('cmLangBtn')) return;
-    let anchor = null;
-    const btns = document.querySelectorAll('button, .btn, a');
-    for (const b of btns) {
-      const t = (b.textContent || '').trim();
-      if (t.indexOf('🔊') === 0 || t.indexOf('Sons') === 0 || t.indexOf('Sound') === 0) { anchor = b; break; }
-    }
-    if (!anchor) { setTimeout(addLangButton, 1200); return; }
-    const btn = anchor.cloneNode(false);
+    const anchor = document.getElementById('menuMusicBtn')
+                || document.getElementById('noAdsBtn')
+                || document.getElementById('leaderboardBtn');
+    if (!anchor) { setTimeout(addLangButton, 700); return; }
+
+    const btn = document.createElement('button');
     btn.id = 'cmLangBtn';
-    btn.textContent = (LANG === 'fr') ? '🌐 English' : '🌐 Français';
-    btn.onclick = function (e) {
-      e.stopPropagation();
-      LANG = (LANG === 'fr') ? 'en' : 'fr';
-      try { localStorage.setItem('cm_lang', LANG); } catch (err) {}
+    btn.type = 'button';
+    btn.className = anchor.className || 'btn';
+    const st = anchor.getAttribute('style');
+    if (st) btn.setAttribute('style', st);
+    btn.textContent = (LANG === 'fr') ? '🌐 EN' : '🌐 FR';
+    btn.setAttribute('data-no-tr', '1');
+
+    function toggle(e) {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      const next = (LANG === 'fr') ? 'en' : 'fr';
+      try { localStorage.setItem('cm_lang', next); } catch (err) {}
       location.reload();
-    };
+    }
+    btn.addEventListener('click', toggle);
+    btn.addEventListener('touchend', toggle, { passive: false });
+
     anchor.parentNode.insertBefore(btn, anchor.nextSibling);
   }
 
