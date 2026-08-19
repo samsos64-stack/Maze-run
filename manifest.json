@@ -1,6 +1,6 @@
 {
-  "name": "Maze Run",
-  "short_name": "Maze Run",
+  "name": "Corn Maze",
+  "short_name": "Corn Maze",
   "description": "Explorez des labyrinthes en vue première personne. Trouvez la sortie avant la fin du temps !",
   "start_url": "./index.html",
   "display": "fullscreen",
