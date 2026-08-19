@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Corn Maze — Labyrinthe 3D</title>
+
+<!-- Page volontairement minuscule : elle sert à l'analyse de PWABuilder,
+     qui abandonne sur index.html (trop lourd à charger : 3D, modèles, textures).
+     Le manifeste indique start_url = index.html, donc l'application
+     installée ouvre bien le jeu directement. -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#00f5a8">
+<link rel="icon" href="icon-192.png">
+<meta name="description" content="Perds-toi dans un labyrinthe en 3D et trouve la sortie.">
+
+<style>
+  html,body{height:100%;margin:0;background:#0c0f1f;color:#eaeef5;
+    font-family:system-ui,sans-serif;display:flex;align-items:center;
+    justify-content:center;text-align:center}
+  .box{padding:24px}
+  h1{font-size:1.9rem;margin:0 0 6px;
+     background:linear-gradient(90deg,#8bc255,#e5b05c);
+     -webkit-background-clip:text;background-clip:text;color:transparent}
+  p{color:#8a93c4;font-size:.9rem;margin:0 0 22px}
+  a{display:inline-block;padding:14px 34px;border:2px solid #8bc255;
+    border-radius:16px;color:#8bc255;text-decoration:none;
+    font-size:1.05rem;font-weight:600}
+</style>
+</head>
+<body>
+  <div class="box">
+    <img src="icon-192.png" alt="" width="96" height="96" style="border-radius:22px">
+    <h1>Corn Maze</h1>
+    <p>Labyrinthe 3D · Trouve la sortie</p>
+    <a href="index.html">▶ Jouer</a>
+  </div>
+</body>
+</html>
