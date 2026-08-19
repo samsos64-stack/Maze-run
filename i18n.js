@@ -35,6 +35,57 @@
     "Classement": "Leaderboard",
     "Aide": "Help",
     "Aucun score enregistré.": "No score saved yet.",
+    // ── Vus sur les captures du 18/08 ──
+    "Un labyrinthe": "A maze",
+    "identique pour tous": "the same for everyone",
+    "Un seul essai · Pas d'aide · Nouveau chaque jour":
+      "One try only · No items · New every day",
+    "Pas d'aide": "No items",
+    "Nouveau chaque jour": "New every day",
+    "← Retour": "← Back",
+    "Retour": "Back",
+    "🗺️ Retour à la carte": "🗺️ Back to map",
+    "Retour à la carte": "Back to map",
+    "▶ Commencer": "▶ Start",
+    "Commencer": "Start",
+    "Ton coffre quotidien t'attend !": "Your daily chest awaits!",
+    "🥇 MEILLEUR SCORE !": "🥇 BEST SCORE!",
+    "MEILLEUR SCORE !": "BEST SCORE!",
+    "MEILLEUR SCORE": "BEST SCORE",
+    "2ᵉ place": "2nd place",
+    "3ᵉ place": "3rd place",
+    "Suivant": "Next",
+    // ── Didacticiel (messages découpés par les balises <b>) ──
+    "👋 Bienvenue !": "👋 Welcome!",
+    "Bienvenue !": "Welcome!",
+    "Glisse ton doigt vers le haut": "Swipe up",
+    "pour avancer": "to move forward",
+    "🎉 Bien joué !": "🎉 Well done!",
+    "Bien joué !": "Well done!",
+    "Les labyrinthes": "The mazes",
+    "grandissent": "get bigger",
+    "à chaque niveau": "with every level",
+    "💡 Astuce :": "💡 Tip:",
+    "Astuce :": "Tip:",
+    "moins de pas = plus de points": "fewer steps = more points",
+    "Plus de carte !": "No more map!",
+    "Utilise la boussole": "Use the compass",
+    "en haut à droite": "at the top right",
+    "Brouillard épais": "Thick fog",
+    "— tu vois moins loin.": "— you can't see as far.",
+    "tu vois moins loin.": "you can't see as far.",
+    "Reste concentré !": "Stay focused!",
+    "MODE CAUCHEMAR": "NIGHTMARE MODE",
+    "Score ×4 — bonne chance...": "Score ×4 — good luck...",
+    "bonne chance...": "good luck...",
+    "Glisse à gauche ou à droite": "Swipe left or right",
+    "pour tourner la vue": "to turn the view",
+    "🗺️ Regarde la": "🗺️ Check the",
+    "Regarde la": "Check the",
+    "Le point vert = toi": "The green dot = you",
+    "🏁 La": "🏁 The",
+    "ligne d'arrivée": "finish line",
+    "est tout près !": "is very close!",
     // ── Menu et navigation ──
     "Jouer": "Play",
     "Reprendre": "Resume",
@@ -147,6 +198,12 @@
 
   // Motifs pour les phrases contenant des nombres ou des noms variables
   const PATTERNS = [
+    [/Série de (\d+) jours?/g,      "$1-day streak"],
+    [/🔥\s*Série\s*:?\s*/g,         "🔥 Streak: "],
+    [/\bSérie\b/g,                  "Streak"],
+    [/\bSuivant\s*:/g,              "Next:"],
+    [/(\d+)\s+jours?\b/g,           "$1 days"],
+    [/\bplace\b/g,                  "place"],
     [/Jouer\s+niveau\s+(\d+)/gi,  "Play level $1"],
     [/\bNiveau\s+(\d+)/g,          "Level $1"],
     [/\bniveau\s+(\d+)/g,          "level $1"],
@@ -248,6 +305,8 @@
     });
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
     addLangButton();
+    // le menu est réécrit après chaque partie, ce qui efface le bouton : on veille
+    setInterval(addLangButton, 1200);
   }
 
   // ── Bouton de langue, dans le MENU PRINCIPAL uniquement ──
