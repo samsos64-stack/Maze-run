@@ -620,7 +620,7 @@
         <div id="hTheme" style="color:var(--accent)">BRIQUES</div>
         <div id="hWeather">☀️</div>
         <button id="soundBtn" title="Son">🔊</button>
-        <button id="mapHintBtn" title="Voir la carte (pub)" style="display:none">🗺️</button>
+        <button id="mapHintBtn" title="Voir la carte" style="display:none">🗺️</button>
         <button id="pauseBtn" title="Pause">⏸</button>
       </div>
     </div>
@@ -768,6 +768,10 @@ const CONTINUE_BONUS_TIME = 30;     // secondes offertes par continuation
 const W = 320, H = 180; // internal render resolution (upscaled by CSS)
 const FOV = Math.PI / 1.92;  // ~94° — très grand angle : couloirs bien dégagés
 const HALF_FOV = FOV / 2;
+// Publicités désactivées tant qu'aucune régie réelle n'est branchée.
+// Repasser à true le jour où les vraies annonces seront en place.
+const ADS_ENABLED = false;
+
 const NUM_RAYS = W;
 // ── Stockage sécurisé : localStorage peut être BLOQUÉ (fichier ouvert en
 // content:// dans Chrome, aperçus sandbox…). Dans ce cas : sauvegarde en
@@ -1094,7 +1098,8 @@ function wireMenuButtons() {
   // Bouton "Sans pub" — masqué si déjà acheté
   const nb = document.getElementById('noAdsBtn');
   if (nb) {
-    if (hasRemovedAds()) {
+    // Sans publicité dans le jeu, il n'y a rien à supprimer : bouton masqué
+    if (!ADS_ENABLED || hasRemovedAds()) {
       nb.style.display = 'none';
     } else {
       nb.style.display = 'inline-block';
@@ -5380,7 +5385,7 @@ function timeOutGame() {
           font-size:0.72rem;padding:11px 8px;
           animation:continuePulse 1.8s ease infinite;
         ">
-          ▶️ Regarder une pub — <b>+${CONTINUE_BONUS_TIME}s</b>
+          ▶️ Continuer — <b>+${CONTINUE_BONUS_TIME}s</b>
         </button>
         <div style="font-size:0.55rem;color:#6a7a9a;margin-top:7px;letter-spacing:0.06em">
           ${remaining} continuation${remaining > 1 ? 's' : ''} restante${remaining > 1 ? 's' : ''}
@@ -5852,9 +5857,9 @@ function showChestScreen() {
         Coffre déjà ouvert aujourd'hui<br>
         <span style="font-size:0.64rem">Reviens demain · 🔥 série ${c.streak || 0}</span>
       </p>
-      <button class="btn" id="watchAdItemBtn" style="border-color:var(--accent);color:var(--accent);font-size:0.7rem;padding:10px 18px">
+      ${ADS_ENABLED ? `<button class="btn" id="watchAdItemBtn" style="border-color:var(--accent);color:var(--accent);font-size:0.7rem;padding:10px 18px">
         ▶️ Une pub = 1 objet
-      </button>
+      </button>` : ''}
     `}
 
     <!-- Inventaire -->
@@ -7190,6 +7195,7 @@ async function preloadInterstitial() {
 }
 
 function showInterstitialAd(onClose) {
+  if (!ADS_ENABLED) { onClose(); return; }   // aucune attente inutile
   if (hasRemovedAds()) { onClose(); return; }
 
   if (IS_NATIVE && window.Capacitor?.Plugins?.AdMob && interstitialReady) {
@@ -7207,6 +7213,7 @@ function showInterstitialAd(onClose) {
 
 // ── Rewarded (débloque la carte 15s) ────────────────────────────────
 function showRewardedAd(onRewarded) {
+  if (!ADS_ENABLED) { onRewarded(); return; }   // récompense immédiate
   if (hasRemovedAds()) { onRewarded(); return; }
 
   if (IS_NATIVE && window.Capacitor?.Plugins?.AdMob) {
@@ -7291,7 +7298,7 @@ function revealMapWithAd() {
         if (!currentLevelConfig.mapVisible) mmWrap.style.display = 'none';
         btn.textContent = '🗺️';
         btn.style.animation = '';
-        btn.title = 'Voir la carte (pub)';
+        btn.title = 'Voir la carte';
       }
     }, 1000);
   });
