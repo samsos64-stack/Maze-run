@@ -721,6 +721,7 @@
         <button class="btn" id="helpToggleBtn" style="padding:7px 14px;font-size:0.62rem;border-color:var(--muted);color:var(--muted)">? Aide</button>
         <button class="btn" id="menuSoundBtn" style="padding:7px 10px;font-size:0.62rem;border-color:var(--muted);color:var(--muted)">🔊</button>
         <button class="btn" id="menuMusicBtn" style="padding:7px 10px;font-size:0.62rem;border-color:var(--muted);color:var(--muted)">🎵</button>
+        <button class="btn" id="shopBtn" style="padding:7px 14px;font-size:0.62rem;border-color:#e5b05c;color:#e5b05c;display:none">🛒 Boutique</button>
         <button class="btn" id="noAdsBtn" style="padding:7px 14px;font-size:0.62rem;border-color:#6dbd8a;color:#6dbd8a">🚫 Sans pub</button>
         <button class="btn" id="resetProgressBtn" style="display:none;border-color:var(--muted);color:var(--muted);font-size:0.58rem;padding:6px 12px;">Reset</button>
       </div>
@@ -771,6 +772,10 @@ const HALF_FOV = FOV / 2;
 // Publicités désactivées tant qu'aucune régie réelle n'est branchée.
 // Repasser à true le jour où les vraies annonces seront en place.
 const ADS_ENABLED = false;
+
+// État de la facturation — déclaré ici car le menu le consulte dès son affichage
+var billingService = null;
+var billingReady = false;
 
 const NUM_RAYS = W;
 // ── Stockage sécurisé : localStorage peut être BLOQUÉ (fichier ouvert en
@@ -1096,6 +1101,11 @@ function wireMenuButtons() {
   const hb = document.getElementById('helpToggleBtn');
   if (hb) hb.onclick = handleHelpToggle;
   // Bouton "Sans pub" — masqué si déjà acheté
+  const shopB = document.getElementById('shopBtn');
+  if (shopB) {
+    shopB.style.display = billingReady ? 'inline-block' : 'none';
+    shopB.onclick = () => { sfxClick(); showShopScreen(); };
+  }
   const nb = document.getElementById('noAdsBtn');
   if (nb) {
     // Sans publicité dans le jeu, il n'y a rien à supprimer : bouton masqué
@@ -1625,6 +1635,9 @@ function init(keepLevel=false, forceLevel=null, mode=undefined) {
   if (window.E3D && window.E3D.ready) window.E3D.buildLevel();
   requestAnimationFrame(loop);
 }
+
+// Différé : billingReady est déclaré plus bas dans le script
+window.addEventListener('load', () => { try { initBilling(); } catch(e) {} });
 
 function fmtTime(s) {
   const m = Math.floor(s/60), sec = String(s%60).padStart(2,'0');
@@ -5818,6 +5831,7 @@ function claimChest() {
   let count = 1;
   if (c.streak >= 3) count = 2;
   if (c.streak >= 7) count = 3;
+  if (hasDoubleChest()) count *= 2;   // avantage du pack Explorateur
 
   const won = [];
   for (let i = 0; i < count; i++) {
@@ -5826,6 +5840,134 @@ function claimChest() {
     won.push(k);
   }
   return { won, streak: c.streak };
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+//  BOUTIQUE — achats via Google Play (API Digital Goods)
+//  Ne fonctionne que dans l'application installée depuis le Play Store.
+//  Ailleurs (navigateur, iPhone), le bouton reste masqué.
+// ══════════════════════════════════════════════════════════════════
+const SHOP_PACKS = [
+  { sku:'pack_petit',       nom:'Petit coup de pouce', qty:2,  prix:'1,99 €', emoji:'🎒', color:'#a3d9b8' },
+  { sku:'pack_aventurier',  nom:'Pack aventurier',     qty:5,  prix:'2,99 €', emoji:'🧰', color:'#e5b05c', star:true },
+  { sku:'pack_explorateur', nom:'Explorateur',         qty:15, prix:'9,99 €', emoji:'👑', color:'#8bc255', chest:true },
+];
+const DOUBLE_CHEST_KEY = 'mazerun_chest_x2';
+
+function hasDoubleChest() {
+  try { return safeStore.getItem(DOUBLE_CHEST_KEY) === '1'; } catch(e) { return false; }
+}
+
+async function initBilling() {
+  try {
+    if (!window.getDigitalGoodsService) { billingReady = false; return false; }
+    billingService = await window.getDigitalGoodsService('https://play.google.com/billing');
+    billingReady = !!billingService;
+  } catch (e) {
+    billingReady = false;
+  }
+  const b = document.getElementById('shopBtn');
+  if (b) b.style.display = billingReady ? 'inline-block' : 'none';
+  return billingReady;
+}
+
+async function buyPack(pack, btn) {
+  if (!billingReady) { showToast('❌ Achats indisponibles ici', 2500); return; }
+  const label = btn ? btn.textContent : '';
+  try {
+    if (btn) { btn.textContent = '…'; btn.style.pointerEvents = 'none'; }
+    const req = new PaymentRequest(
+      [{ supportedMethods: 'https://play.google.com/billing', data: { sku: pack.sku } }],
+      { total: { label: pack.nom, amount: { currency: 'EUR', value: '0' } } }
+    );
+    const resp = await req.show();
+    const token = resp.details && resp.details.token;
+
+    // Les objets sont crédités avant d'accuser réception : si l'application
+    // se ferme au mauvais moment, le joueur a déjà reçu ce qu'il a payé.
+    ITEM_KEYS.forEach(k => addItem(k, pack.qty));
+    if (pack.chest) { try { safeStore.setItem(DOUBLE_CHEST_KEY, '1'); } catch(e) {} }
+
+    // Un pack d'objets se rachète : on le déclare consommé auprès de Google
+    if (token && billingService && billingService.consume && !pack.chest) {
+      try { await billingService.consume(token); } catch(e) {}
+    }
+    await resp.complete('success');
+
+    sfxWin(); vibrate([20, 40, 20]);
+    refreshItemBar();
+    showToast(`🎉 ${pack.nom} — +${pack.qty} de chaque objet !`, 3200);
+    showShopScreen();
+  } catch (e) {
+    if (btn) { btn.textContent = label; btn.style.pointerEvents = 'auto'; }
+    showToast('Achat annulé', 1800);
+  }
+}
+
+function showShopScreen() {
+  running = false;
+  const ov = document.getElementById('overlay');
+  const inv = loadItems();
+
+  ov.innerHTML = `
+    <h2 style="font-size:1.4rem">🛒 BOUTIQUE</h2>
+    <p style="font-size:0.66rem;color:#8a93c4;margin:2px 0 14px">
+      Des objets pour t'aider à sortir du labyrinthe
+    </p>
+
+    <div style="display:flex;gap:6px;justify-content:center;margin-bottom:16px;flex-wrap:wrap">
+      ${ITEM_KEYS.map(k => `
+        <div style="display:flex;flex-direction:column;align-items:center;
+                    background:rgba(255,255,255,0.05);border-radius:10px;
+                    padding:6px 9px;min-width:44px">
+          <span style="font-size:1.1rem">${ITEMS[k].emoji}</span>
+          <span style="font-size:0.56rem;color:${ITEMS[k].color}">×${inv[k] || 0}</span>
+        </div>`).join('')}
+    </div>
+
+    ${SHOP_PACKS.map((p, i) => `
+      <div style="position:relative;display:flex;align-items:center;gap:11px;
+                  background:${p.star ? 'linear-gradient(135deg,rgba(229,176,92,0.16),rgba(139,194,85,0.08))' : 'rgba(255,255,255,0.045)'};
+                  border:1.5px solid ${p.star ? 'rgba(229,176,92,0.6)' : 'rgba(255,255,255,0.1)'};
+                  border-radius:14px;padding:11px 12px;margin-bottom:9px;width:100%;max-width:330px">
+        ${p.star ? `<span style="position:absolute;top:-8px;right:12px;background:#e5b05c;
+                     color:#2a2010;font-size:0.5rem;font-weight:700;padding:2px 8px;
+                     border-radius:8px;letter-spacing:0.04em">LE PLUS PRIS</span>` : ''}
+        <div style="width:42px;height:42px;flex:0 0 42px;border-radius:11px;
+                    display:flex;align-items:center;justify-content:center;font-size:1.35rem;
+                    background:rgba(255,255,255,0.06);border:2px solid ${p.color}">${p.emoji}</div>
+        <div style="flex:1;min-width:0;text-align:left">
+          <div style="font-size:0.76rem;font-weight:600;color:${p.color}">${p.nom}</div>
+          <div style="font-size:0.58rem;color:#8a93c4;line-height:1.3;margin-top:1px">
+            ${p.qty} de chaque objet${p.chest ? '<br>et coffre quotidien doublé' : ''}
+          </div>
+        </div>
+        <button class="btn shopBuyBtn" data-i="${i}" style="flex:0 0 auto;
+                border-color:${p.color};color:${p.color};
+                font-size:0.68rem;padding:9px 12px">${p.prix}</button>
+      </div>`).join('')}
+
+    <p style="font-size:0.54rem;color:#5d6585;margin:10px 0 14px;line-height:1.5;max-width:300px">
+      Les objets sont un coup de pouce, jamais une obligation :<br>
+      chaque labyrinthe reste terminable sans en utiliser un seul.
+    </p>
+
+    <button class="btn" id="shopBackBtn" style="font-size:0.7rem;padding:10px 22px">← Retour</button>
+  `;
+  ov.style.display = 'flex';
+
+  document.querySelectorAll('.shopBuyBtn').forEach(b => {
+    b.onclick = (e) => { sfxClick(); buyPack(SHOP_PACKS[+e.currentTarget.dataset.i], e.currentTarget); };
+  });
+  document.getElementById('shopBackBtn').onclick = () => {
+    sfxClick();
+    ov.innerHTML = menuHTML;
+    ov.style.display = 'flex';
+    wireMenuButtons();
+    renderMenuMazeBg();
+    updateIntroResumeUI();
+  };
 }
 
 function showChestScreen() {
