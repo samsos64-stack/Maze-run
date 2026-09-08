@@ -721,7 +721,7 @@
         <button class="btn" id="helpToggleBtn" style="padding:7px 14px;font-size:0.62rem;border-color:var(--muted);color:var(--muted)">? Aide</button>
         <button class="btn" id="menuSoundBtn" style="padding:7px 10px;font-size:0.62rem;border-color:var(--muted);color:var(--muted)">🔊</button>
         <button class="btn" id="menuMusicBtn" style="padding:7px 10px;font-size:0.62rem;border-color:var(--muted);color:var(--muted)">🎵</button>
-        <button class="btn" id="shopBtn" style="padding:7px 14px;font-size:0.62rem;border-color:#e5b05c;color:#e5b05c;display:none">🛒 Boutique</button>
+        <button class="btn" id="shopBtn" style="padding:7px 14px;font-size:0.62rem;border-color:#e5b05c;color:#e5b05c">🛒 Boutique</button>
         <button class="btn" id="noAdsBtn" style="padding:7px 14px;font-size:0.62rem;border-color:#6dbd8a;color:#6dbd8a">🚫 Sans pub</button>
         <button class="btn" id="resetProgressBtn" style="display:none;border-color:var(--muted);color:var(--muted);font-size:0.58rem;padding:6px 12px;">Reset</button>
       </div>
@@ -1103,7 +1103,7 @@ function wireMenuButtons() {
   // Bouton "Sans pub" — masqué si déjà acheté
   const shopB = document.getElementById('shopBtn');
   if (shopB) {
-    shopB.style.display = billingReady ? 'inline-block' : 'none';
+    shopB.style.display = 'inline-block';
     shopB.onclick = () => { sfxClick(); showShopScreen(); };
   }
   const nb = document.getElementById('noAdsBtn');
@@ -5867,8 +5867,6 @@ async function initBilling() {
   } catch (e) {
     billingReady = false;
   }
-  const b = document.getElementById('shopBtn');
-  if (b) b.style.display = billingReady ? 'inline-block' : 'none';
   return billingReady;
 }
 
@@ -5905,8 +5903,9 @@ async function buyPack(pack, btn) {
   }
 }
 
-function showShopScreen() {
+async function showShopScreen() {
   running = false;
+  if (!billingReady) { try { await initBilling(); } catch(e) {} }
   const ov = document.getElementById('overlay');
   const inv = loadItems();
 
@@ -5925,6 +5924,19 @@ function showShopScreen() {
           <span style="font-size:0.56rem;color:${ITEMS[k].color}">×${inv[k] || 0}</span>
         </div>`).join('')}
     </div>
+
+    ${billingReady ? '' : `
+      <div style="background:rgba(229,176,92,0.12);border:1.5px solid rgba(229,176,92,0.5);
+                  border-radius:12px;padding:11px 14px;margin-bottom:14px;max-width:330px">
+        <div style="font-size:0.68rem;color:#e5b05c;font-weight:600;margin-bottom:4px">
+          Achats indisponibles ici
+        </div>
+        <div style="font-size:0.56rem;color:#8a93c4;line-height:1.45">
+          Les achats ne fonctionnent que dans l'application installée
+          depuis le Play Store.<br>
+          <span style="color:#5d6585">${window.getDigitalGoodsService ? 'Service détecté, mais non initialisé.' : 'Service de facturation absent de ce navigateur.'}</span>
+        </div>
+      </div>`}
 
     ${SHOP_PACKS.map((p, i) => `
       <div style="position:relative;display:flex;align-items:center;gap:11px;
