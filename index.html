@@ -776,6 +776,7 @@ const ADS_ENABLED = false;
 // État de la facturation — déclaré ici car le menu le consulte dès son affichage
 var billingService = null;
 var billingReady = false;
+var billingError = '';
 
 const NUM_RAYS = W;
 // ── Stockage sécurisé : localStorage peut être BLOQUÉ (fichier ouvert en
@@ -5861,11 +5862,28 @@ function hasDoubleChest() {
 
 async function initBilling() {
   try {
-    if (!window.getDigitalGoodsService) { billingReady = false; return false; }
+    if (!window.getDigitalGoodsService) {
+      billingReady = false;
+      billingError = "Service absent (hors application Play Store)";
+      return false;
+    }
     billingService = await window.getDigitalGoodsService('https://play.google.com/billing');
     billingReady = !!billingService;
+    if (billingReady) {
+      billingError = '';
+      // on interroge les produits : c'est ici qu'on voit s'ils sont bien servis
+      try {
+        const d = await billingService.getDetails(SHOP_PACKS.map(p => p.sku));
+        billingError = (d && d.length) ? '' : "Aucun produit renvoyé par Google";
+      } catch (e2) {
+        billingError = "getDetails : " + (e2 && e2.message ? e2.message : e2);
+      }
+    } else {
+      billingError = "Service non initialisé (retour vide)";
+    }
   } catch (e) {
     billingReady = false;
+    billingError = (e && e.message) ? e.message : String(e);
   }
   return billingReady;
 }
@@ -5929,12 +5947,12 @@ async function showShopScreen() {
       <div style="background:rgba(229,176,92,0.12);border:1.5px solid rgba(229,176,92,0.5);
                   border-radius:12px;padding:11px 14px;margin-bottom:14px;max-width:330px">
         <div style="font-size:0.68rem;color:#e5b05c;font-weight:600;margin-bottom:4px">
-          Achats indisponibles ici
+          Boutique bientôt disponible
         </div>
         <div style="font-size:0.56rem;color:#8a93c4;line-height:1.45">
-          Les achats ne fonctionnent que dans l'application installée
-          depuis le Play Store.<br>
-          <span style="color:#5d6585">${window.getDigitalGoodsService ? 'Service détecté, mais non initialisé.' : 'Service de facturation absent de ce navigateur.'}</span>
+          Les achats ne sont pas encore actifs sur cette version.
+          Reviens un peu plus tard !<br>
+          <span style="color:#4a5170;font-size:0.5rem">${billingError || 'raison inconnue'}</span>
         </div>
       </div>`}
 
