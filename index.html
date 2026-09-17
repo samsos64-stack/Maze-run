@@ -5874,6 +5874,24 @@ function hasDoubleChest() {
 //  · application native  -> composant CdvPurchase (Google Play)
 //  · site web / iPhone   -> aucun achat, la boutique l'annonce
 let cdvProducts = {};
+let billingInitLance = false;          // empeche les inscriptions multiples
+const TRANSACTIONS_KEY = 'mazerun_tx_creditees';
+
+function txDejaCreditee(id) {
+  if (!id) return false;
+  try {
+    const l = JSON.parse(safeStore.getItem(TRANSACTIONS_KEY) || '[]');
+    return l.indexOf(id) !== -1;
+  } catch (e) { return false; }
+}
+function marquerTx(id) {
+  if (!id) return;
+  try {
+    const l = JSON.parse(safeStore.getItem(TRANSACTIONS_KEY) || '[]');
+    l.push(id);
+    safeStore.setItem(TRANSACTIONS_KEY, JSON.stringify(l.slice(-50)));
+  } catch (e) {}
+}
 
 function billingPlugin() {
   return (window.CdvPurchase && window.CdvPurchase.store) ? window.CdvPurchase : null;
@@ -5886,7 +5904,8 @@ async function initBilling() {
     billingError = "Service absent (hors application Play Store)";
     return false;
   }
-  if (billingReady) return true;
+  if (billingReady || billingInitLance) return billingReady;
+  billingInitLance = true;
 
   try {
     const store = P.store;
@@ -5904,7 +5923,12 @@ async function initBilling() {
         try {
           const id = (tr.products && tr.products[0]) ? tr.products[0].id : null;
           const pack = SHOP_PACKS.find(x => x.sku === id);
-          if (pack) crediterPack(pack);
+          // identifiant unique de la transaction : garde-fou contre le double credit
+          const txid = tr.transactionId || tr.purchaseId || (id + ':' + (tr.purchaseDate || ''));
+          if (pack && !txDejaCreditee(txid)) {
+            marquerTx(txid);
+            crediterPack(pack);
+          }
         } catch (e) {}
         tr.finish();
       })
@@ -5927,6 +5951,7 @@ async function initBilling() {
     billingError = billingReady ? '' : "Aucun produit renvoye par Google";
   } catch (e) {
     billingReady = false;
+    billingInitLance = false;      // on pourra retenter
     billingError = (e && e.message) ? e.message : String(e);
   }
   return billingReady;
@@ -5957,6 +5982,58 @@ async function buyPack(pack, btn) {
   } finally {
     if (btn) { btn.textContent = label; btn.style.pointerEvents = 'auto'; }
   }
+}
+
+// Fiche d'un pack : on voit ce qu'on achete avant de confirmer
+function showPackDetail(pack) {
+  running = false;
+  const ov = document.getElementById('overlay');
+  const inv = loadItems();
+
+  ov.innerHTML = `
+    <div style="width:56px;height:56px;border-radius:15px;display:flex;
+                align-items:center;justify-content:center;font-size:1.8rem;
+                background:rgba(255,255,255,0.06);border:2.5px solid ${pack.color};
+                margin-bottom:10px">${pack.emoji}</div>
+
+    <h2 style="font-size:1.25rem;color:${pack.color};margin:0 0 3px">${pack.nom}</h2>
+    <p style="font-size:0.6rem;color:#8a93c4;margin:0 0 18px">Contenu de ce pack</p>
+
+    <div style="display:flex;flex-direction:column;gap:7px;width:100%;max-width:310px;margin-bottom:14px">
+      ${ITEM_KEYS.map(k => `
+        <div style="display:flex;align-items:center;gap:10px;
+                    background:rgba(255,255,255,0.045);border-radius:11px;padding:8px 11px">
+          <span style="font-size:1.15rem">${ITEMS[k].emoji}</span>
+          <span style="flex:1;text-align:left;font-size:0.65rem;color:${ITEMS[k].color}">${ITEMS[k].name}</span>
+          <span style="font-size:0.58rem;color:#6a7a9a">tu en as ${inv[k] || 0}</span>
+          <span style="font-size:0.72rem;font-weight:700;color:#8bc255">+${pack.qty}</span>
+        </div>`).join('')}
+      ${pack.chest ? `
+        <div style="display:flex;align-items:center;gap:10px;
+                    background:rgba(139,194,85,0.12);border:1px solid rgba(139,194,85,0.4);
+                    border-radius:11px;padding:8px 11px">
+          <span style="font-size:1.15rem">🎁</span>
+          <span style="flex:1;text-align:left;font-size:0.65rem;color:#8bc255">Coffre quotidien</span>
+          <span style="font-size:0.72rem;font-weight:700;color:#8bc255">×2</span>
+        </div>` : ''}
+    </div>
+
+    <div style="font-size:1.35rem;font-weight:700;color:${pack.color};margin-bottom:4px">${pack.prix}</div>
+    <p style="font-size:0.52rem;color:#5d6585;margin:0 0 16px;max-width:280px;line-height:1.5">
+      Paiement securise par Google Play.<br>Achat unique, sans abonnement.
+    </p>
+
+    <button class="btn" id="confirmBuyBtn" style="border-color:${pack.color};color:${pack.color};
+            font-size:0.78rem;padding:12px 30px;margin-bottom:9px">Acheter</button>
+    <button class="btn" id="cancelBuyBtn" style="font-size:0.68rem;padding:9px 22px">← Retour</button>
+  `;
+  ov.style.display = 'flex';
+
+  document.getElementById('confirmBuyBtn').onclick = (e) => {
+    sfxClick();
+    buyPack(pack, e.currentTarget);
+  };
+  document.getElementById('cancelBuyBtn').onclick = () => { sfxClick(); showShopScreen(); };
 }
 
 async function showShopScreen() {
@@ -6026,7 +6103,7 @@ async function showShopScreen() {
   ov.style.display = 'flex';
 
   document.querySelectorAll('.shopBuyBtn').forEach(b => {
-    b.onclick = (e) => { sfxClick(); buyPack(SHOP_PACKS[+e.currentTarget.dataset.i], e.currentTarget); };
+    b.onclick = (e) => { sfxClick(); showPackDetail(SHOP_PACKS[+e.currentTarget.dataset.i]); };
   });
   document.getElementById('shopBackBtn').onclick = () => {
     sfxClick();
