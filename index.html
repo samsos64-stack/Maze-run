@@ -1638,7 +1638,17 @@ function init(keepLevel=false, forceLevel=null, mode=undefined) {
 }
 
 // Différé : billingReady est déclaré plus bas dans le script
-window.addEventListener('load', () => { try { initBilling(); } catch(e) {} });
+window.addEventListener('load', () => {
+  // le composant de facturation s'annonce apres le chargement : plusieurs essais
+  let essais = 0;
+  const tenter = () => {
+    essais++;
+    try { initBilling(); } catch (e) {}
+    if (!billingReady && essais < 6) setTimeout(tenter, 1500);
+  };
+  setTimeout(tenter, 600);
+  document.addEventListener('deviceready', tenter, false);
+});
 
 function fmtTime(s) {
   const m = Math.floor(s/60), sec = String(s%60).padStart(2,'0');
@@ -5860,27 +5870,61 @@ function hasDoubleChest() {
   try { return safeStore.getItem(DOUBLE_CHEST_KEY) === '1'; } catch(e) { return false; }
 }
 
+// Deux mondes possibles :
+//  · application native  -> composant CdvPurchase (Google Play)
+//  · site web / iPhone   -> aucun achat, la boutique l'annonce
+let cdvProducts = {};
+
+function billingPlugin() {
+  return (window.CdvPurchase && window.CdvPurchase.store) ? window.CdvPurchase : null;
+}
+
 async function initBilling() {
+  const P = billingPlugin();
+  if (!P) {
+    billingReady = false;
+    billingError = "Service absent (hors application Play Store)";
+    return false;
+  }
+  if (billingReady) return true;
+
   try {
-    if (!window.getDigitalGoodsService) {
-      billingReady = false;
-      billingError = "Service absent (hors application Play Store)";
-      return false;
-    }
-    billingService = await window.getDigitalGoodsService('https://play.google.com/billing');
-    billingReady = !!billingService;
-    if (billingReady) {
-      billingError = '';
-      // on interroge les produits : c'est ici qu'on voit s'ils sont bien servis
-      try {
-        const d = await billingService.getDetails(SHOP_PACKS.map(p => p.sku));
-        billingError = (d && d.length) ? '' : "Aucun produit renvoyé par Google";
-      } catch (e2) {
-        billingError = "getDetails : " + (e2 && e2.message ? e2.message : e2);
-      }
-    } else {
-      billingError = "Service non initialisé (retour vide)";
-    }
+    const store = P.store;
+    const GP = P.Platform.GOOGLE_PLAY;
+
+    store.register(SHOP_PACKS.map(p => ({
+      id: p.sku,
+      type: p.chest ? P.ProductType.NON_CONSUMABLE : P.ProductType.CONSUMABLE,
+      platform: GP
+    })));
+
+    // Un achat approuvé par Google : on crédite, puis on clôt la transaction
+    store.when()
+      .approved(tr => {
+        try {
+          const id = (tr.products && tr.products[0]) ? tr.products[0].id : null;
+          const pack = SHOP_PACKS.find(x => x.sku === id);
+          if (pack) crediterPack(pack);
+        } catch (e) {}
+        tr.finish();
+      })
+      .verified(r => { try { r.finish(); } catch (e) {} });
+
+    store.error(err => {
+      billingError = "Play : " + (err && err.message ? err.message : err);
+    });
+
+    await store.initialize([GP]);
+    await store.update();
+
+    SHOP_PACKS.forEach(p => {
+      const prod = store.get(p.sku, GP);
+      if (prod) cdvProducts[p.sku] = prod;
+    });
+
+    const trouves = Object.keys(cdvProducts).length;
+    billingReady = trouves > 0;
+    billingError = billingReady ? '' : "Aucun produit renvoye par Google";
   } catch (e) {
     billingReady = false;
     billingError = (e && e.message) ? e.message : String(e);
@@ -5888,36 +5932,30 @@ async function initBilling() {
   return billingReady;
 }
 
+// Attribution des objets — appelée uniquement quand Google a validé le paiement
+function crediterPack(pack) {
+  ITEM_KEYS.forEach(k => addItem(k, pack.qty));
+  if (pack.chest) { try { safeStore.setItem(DOUBLE_CHEST_KEY, '1'); } catch (e) {} }
+  try { sfxWin(); vibrate([20, 40, 20]); refreshItemBar(); } catch (e) {}
+  showToast(`🎉 ${pack.nom} — +${pack.qty} de chaque objet !`, 3200);
+  try { if (document.getElementById('shopBackBtn')) showShopScreen(); } catch (e) {}
+}
+
 async function buyPack(pack, btn) {
-  if (!billingReady) { showToast('❌ Achats indisponibles ici', 2500); return; }
+  const P = billingPlugin();
+  if (!billingReady || !P) { showToast('❌ Achats indisponibles ici', 2500); return; }
   const label = btn ? btn.textContent : '';
   try {
     if (btn) { btn.textContent = '…'; btn.style.pointerEvents = 'none'; }
-    const req = new PaymentRequest(
-      [{ supportedMethods: 'https://play.google.com/billing', data: { sku: pack.sku } }],
-      { total: { label: pack.nom, amount: { currency: 'EUR', value: '0' } } }
-    );
-    const resp = await req.show();
-    const token = resp.details && resp.details.token;
-
-    // Les objets sont crédités avant d'accuser réception : si l'application
-    // se ferme au mauvais moment, le joueur a déjà reçu ce qu'il a payé.
-    ITEM_KEYS.forEach(k => addItem(k, pack.qty));
-    if (pack.chest) { try { safeStore.setItem(DOUBLE_CHEST_KEY, '1'); } catch(e) {} }
-
-    // Un pack d'objets se rachète : on le déclare consommé auprès de Google
-    if (token && billingService && billingService.consume && !pack.chest) {
-      try { await billingService.consume(token); } catch(e) {}
-    }
-    await resp.complete('success');
-
-    sfxWin(); vibrate([20, 40, 20]);
-    refreshItemBar();
-    showToast(`🎉 ${pack.nom} — +${pack.qty} de chaque objet !`, 3200);
-    showShopScreen();
+    const prod = cdvProducts[pack.sku] || P.store.get(pack.sku, P.Platform.GOOGLE_PLAY);
+    if (!prod) throw new Error("produit introuvable");
+    const offre = prod.getOffer ? prod.getOffer() : (prod.offers && prod.offers[0]);
+    if (!offre) throw new Error("offre introuvable");
+    await offre.order();          // l'attribution se fait dans .approved()
   } catch (e) {
-    if (btn) { btn.textContent = label; btn.style.pointerEvents = 'auto'; }
     showToast('Achat annulé', 1800);
+  } finally {
+    if (btn) { btn.textContent = label; btn.style.pointerEvents = 'auto'; }
   }
 }
 
