@@ -890,7 +890,18 @@ const SAVE_KEY = 'labyrinthe3d_progress';
 function saveProgress() {
   if (TEST_UNLOCK_ALL) return;   // mode test : on ne touche pas à la vraie sauvegarde
   try {
-    safeStore.setItem(SAVE_KEY, JSON.stringify({ level }));
+    // On ne garde QUE le niveau le plus haut jamais atteint : rejouer un
+    // niveau deja termine ne doit jamais faire reculer la progression.
+    let record = 1;
+    try {
+      const brut = safeStore.getItem(SAVE_KEY);
+      if (brut) {
+        const d = JSON.parse(brut);
+        if (d && Number.isInteger(d.level) && d.level >= 1) record = d.level;
+      }
+    } catch(e) {}
+    const garde = Math.max(record, level);
+    safeStore.setItem(SAVE_KEY, JSON.stringify({ level: garde }));
   } catch(e) { /* localStorage indisponible, on ignore silencieusement */ }
 }
 
@@ -6343,6 +6354,14 @@ function refreshItemBar() {
   const bar = document.getElementById('itemBar');
   if (!bar) return;
   if (dailyMode) { bar.style.display = 'none'; return; }
+
+  // Hors partie (menu, carte, boutique, coffre...), la barre n'a rien a faire
+  // a l'ecran : elle recouvrait les boutons du menu principal.
+  const ov = document.getElementById('overlay');
+  if (!running || (ov && ov.style.display !== 'none' && ov.style.display !== '')) {
+    bar.style.display = 'none';
+    return;
+  }
 
   const inv = loadItems();
   const owned = ITEM_KEYS.filter(k => inv[k] > 0);
