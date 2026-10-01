@@ -1104,6 +1104,10 @@ function showLeaderboard() {
 let menuHTML = '';
 
 function wireMenuButtons() {
+  // Le menu n'affiche jamais la barre d'objets : elle recouvrait les boutons.
+  const barreObjets = document.getElementById('itemBar');
+  if (barreObjets) barreObjets.style.display = 'none';
+
   const sb = document.getElementById('startBtn');
   if (sb) sb.onclick = () => init(false, loadProgress());
   const rb = document.getElementById('resetProgressBtn');
@@ -1650,6 +1654,15 @@ function init(keepLevel=false, forceLevel=null, mode=undefined) {
 
 // Différé : billingReady est déclaré plus bas dans le script
 window.addEventListener('load', () => {
+  // Surveillance legere : hors partie, la barre d'objets ne doit jamais rester
+  // affichee (elle se rallumait au lancement du jeu, par-dessus le menu).
+  setInterval(() => {
+    try {
+      const b = document.getElementById('itemBar');
+      if (b && !running && b.style.display !== 'none') b.style.display = 'none';
+    } catch (e) {}
+  }, 700);
+
   // le composant de facturation s'annonce apres le chargement : plusieurs essais
   let essais = 0;
   const tenter = () => {
