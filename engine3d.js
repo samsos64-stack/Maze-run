@@ -17,6 +17,171 @@ const SNUG   = { 'briques':1.04, 'buissons':1.22, 'maïs':1.14 };
 
 const G = () => window.GAME3D;
 
+// ══════════════════════════════════════════════════════════════════
+//  THEME HALLOWEEN — s'active tout seul du 15 au 31 octobre.
+//  Pour tester hors periode : ajouter ?halloween=1 a l'adresse.
+//  (ou ?halloween=0 pour le desactiver de force)
+// ══════════════════════════════════════════════════════════════════
+const HALLO = (() => {
+  try {
+    const q = new URLSearchParams(location.search).get('halloween');
+    if (q === '1') return true;
+    if (q === '0') return false;
+  } catch(e) {}
+  const d = new Date();
+  return d.getMonth() === 9 && d.getDate() >= 15 && d.getDate() <= 31;  // octobre
+})();
+
+// Palette de la nuit d'Halloween
+const H_CIEL   = 0x120a24;   // violet tres sombre
+const H_BRUME  = 0x2a1b45;   // brume violette
+const H_LUNE   = 0xfff2cc;
+
+// ── Textures dessinees en code pour Halloween ─────────────────────
+function haloTex(){
+  const S=128,c=document.createElement('canvas');c.width=c.height=S;
+  const g=c.getContext('2d');g.clearRect(0,0,S,S);
+  const r=g.createRadialGradient(64,64,4,64,64,64);
+  r.addColorStop(0,'rgba(255,170,60,0.95)');
+  r.addColorStop(0.45,'rgba(255,120,30,0.35)');
+  r.addColorStop(1,'rgba(255,100,20,0)');
+  g.fillStyle=r;g.beginPath();g.arc(64,64,64,0,7);g.fill();
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;
+}
+function luneTex(){
+  const S=256,c=document.createElement('canvas');c.width=c.height=S;
+  const g=c.getContext('2d');g.clearRect(0,0,S,S);
+  // halo
+  const h=g.createRadialGradient(128,128,40,128,128,128);
+  h.addColorStop(0,'rgba(255,242,204,0.55)');h.addColorStop(1,'rgba(255,242,204,0)');
+  g.fillStyle=h;g.beginPath();g.arc(128,128,128,0,7);g.fill();
+  // disque
+  g.fillStyle='#fff6dd';g.beginPath();g.arc(128,128,74,0,7);g.fill();
+  // crateres
+  g.fillStyle='rgba(222,205,165,0.75)';
+  [[108,104,17],[150,126,12],[120,156,14],[156,92,8],[96,140,9]]
+    .forEach(([x,y,r])=>{g.beginPath();g.arc(x,y,r,0,7);g.fill();});
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;
+}
+
+function chauveSourisTex(){
+  const S=64,c=document.createElement('canvas');c.width=c.height=S;
+  const g=c.getContext('2d');g.clearRect(0,0,S,S);
+  g.fillStyle='#15101f';
+  // aile gauche (membrane festonnee)
+  g.beginPath();g.moveTo(32,30);
+  g.quadraticCurveTo(20,16,6,20);g.lineTo(12,28);g.lineTo(4,30);
+  g.lineTo(12,34);g.lineTo(8,40);g.quadraticCurveTo(22,38,32,36);g.fill();
+  // aile droite (miroir)
+  g.beginPath();g.moveTo(32,30);
+  g.quadraticCurveTo(44,16,58,20);g.lineTo(52,28);g.lineTo(60,30);
+  g.lineTo(52,34);g.lineTo(56,40);g.quadraticCurveTo(42,38,32,36);g.fill();
+  // corps + oreilles
+  g.beginPath();g.ellipse(32,32,5,8,0,0,7);g.fill();
+  g.beginPath();g.moveTo(28,25);g.lineTo(26,17);g.lineTo(32,23);g.closePath();g.fill();
+  g.beginPath();g.moveTo(36,25);g.lineTo(38,17);g.lineTo(32,23);g.closePath();g.fill();
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;
+}
+
+function fantomeTex(){
+  const S=128,c=document.createElement('canvas');c.width=c.height=S;
+  const g=c.getContext('2d');g.clearRect(0,0,S,S);
+  g.fillStyle='rgba(226,232,255,0.80)';
+  g.beginPath();
+  g.moveTo(26,104);
+  g.lineTo(26,56);
+  g.quadraticCurveTo(26,16,64,16);
+  g.quadraticCurveTo(102,16,102,56);
+  g.lineTo(102,104);
+  // bas ondule
+  g.quadraticCurveTo(94,118,86,104);
+  g.quadraticCurveTo(78,118,70,104);
+  g.quadraticCurveTo(62,118,54,104);
+  g.quadraticCurveTo(46,118,38,104);
+  g.quadraticCurveTo(32,114,26,104);
+  g.fill();
+  // visage rigolo
+  g.fillStyle='#2a2440';
+  g.beginPath();g.ellipse(50,54,7,9,0,0,7);g.fill();
+  g.beginPath();g.ellipse(78,54,7,9,0,0,7);g.fill();
+  g.beginPath();g.ellipse(64,76,9,7,0,0,7);g.fill();
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;
+}
+
+function chatNoirTex(){
+  const S=64,c=document.createElement('canvas');c.width=c.height=S;
+  const g=c.getContext('2d');g.clearRect(0,0,S,S);
+  g.fillStyle='#0e0b14';
+  // queue dressee
+  g.strokeStyle='#0e0b14';g.lineWidth=3.2;
+  g.beginPath();g.moveTo(14,38);g.quadraticCurveTo(2,30,8,16);g.stroke();
+  // corps + tete
+  g.beginPath();g.ellipse(32,38,17,9,0,0,7);g.fill();
+  g.beginPath();g.arc(50,30,8,0,7);g.fill();
+  // oreilles
+  g.beginPath();g.moveTo(44,24);g.lineTo(43,14);g.lineTo(51,22);g.closePath();g.fill();
+  g.beginPath();g.moveTo(54,22);g.lineTo(58,13);g.lineTo(58,24);g.closePath();g.fill();
+  // pattes
+  g.lineWidth=3.4;
+  for(const bx of [24,32,40]){g.beginPath();g.moveTo(bx,45);g.lineTo(bx,52);g.stroke();}
+  // yeux jaunes
+  g.fillStyle='#f5c518';
+  g.beginPath();g.ellipse(50,29,2.6,3.4,0,0,7);g.fill();
+  g.beginPath();g.ellipse(55,29,2.2,3.0,0,0,7);g.fill();
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;
+}
+
+function toileTex(){
+  const S=256,c=document.createElement('canvas');c.width=c.height=S;
+  const g=c.getContext('2d');g.clearRect(0,0,S,S);
+  g.strokeStyle='rgba(232,236,248,0.78)';g.lineWidth=1.6;
+  const ox=0, oy=0;                       // toile ancree dans un coin
+  const rayons=7, anneaux=6, R=230;
+  for(let i=0;i<=rayons;i++){
+    const a=(Math.PI/2)*(i/rayons);
+    g.beginPath();g.moveTo(ox,oy);
+    g.lineTo(ox+Math.cos(a)*R, oy+Math.sin(a)*R);g.stroke();
+  }
+  for(let k=1;k<=anneaux;k++){
+    const r=R*k/anneaux*(0.55+0.45*k/anneaux);
+    g.beginPath();
+    for(let i=0;i<=rayons;i++){
+      const a=(Math.PI/2)*(i/rayons);
+      const x=ox+Math.cos(a)*r, y=oy+Math.sin(a)*r;
+      if(i===0) g.moveTo(x,y);
+      else{
+        const ap=(Math.PI/2)*((i-0.5)/rayons);
+        g.quadraticCurveTo(ox+Math.cos(ap)*r*0.86, oy+Math.sin(ap)*r*0.86, x, y);
+      }
+    }
+    g.stroke();
+  }
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;
+}
+
+function sorciereTex(){
+  const S=128,c=document.createElement('canvas');c.width=c.height=S;
+  const g=c.getContext('2d');g.clearRect(0,0,S,S);
+  g.fillStyle='#0a0714';
+  // manche a balai
+  g.strokeStyle='#0a0714';g.lineWidth=4;
+  g.beginPath();g.moveTo(16,78);g.lineTo(104,66);g.stroke();
+  // brindilles
+  g.lineWidth=2;
+  for(let i=-3;i<=3;i++){g.beginPath();g.moveTo(104,66);g.lineTo(122,66+i*5);g.stroke();}
+  // silhouette assise
+  g.beginPath();g.ellipse(58,62,13,16,-0.25,0,7);g.fill();      // buste
+  g.beginPath();g.arc(50,40,9,0,7);g.fill();                     // tete
+  // chapeau pointu
+  g.beginPath();g.moveTo(34,34);g.lineTo(66,34);g.lineTo(50,32);g.closePath();g.fill();
+  g.beginPath();g.moveTo(42,33);g.lineTo(58,33);g.lineTo(62,6);g.closePath();g.fill();
+  // cape qui flotte
+  g.beginPath();g.moveTo(66,54);g.quadraticCurveTo(96,58,112,46);
+  g.quadraticCurveTo(92,72,68,70);g.closePath();g.fill();
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;return t;
+}
+
+
 let renderer, scene, camera, ground, cloudLayer, cloudMat, skyline, skyMat, rainPts, rainGeo;
 let sun, hemi;
 const RAW = {}, TEX = {}, P = {};
@@ -214,6 +379,8 @@ function butterflyTex(c1,c2){
 }
 
 const GT={}, CLOUD={}, PUFF={}, SKYL={}, CT={}, BFLY=[];
+const HT={};            // textures Halloween
+let luneObj=null, sorciereObj=null;
 
 
 // ── Effets de bonus : empreintes du fil d'Ariane, main à la craie ──
@@ -393,6 +560,22 @@ function rebuildProtos(theme){
   P.cof  = prep('coffre','prop',1,0,CELL*.45);
   P.cai  = prep('cailloux','prop',1,0,CELL*.35);
   P.spr  = prep('spray','prop',1,0,CELL*.2);
+  if(HALLO){
+    P.pump = prep('citrouille','prop',1,0,CELL*.34);
+    P.epou = prep('epouvantail','prop',1,0,CELL*.55);
+    P.zomb = prep('zombie','prop',1,0,CELL*.50);
+    P.arai = prep('araignee','prop',1,0,CELL*.22);
+  }
+}
+
+// Toile d'araignee : un quart de disque plaque dans un angle de couloir
+function makeToile(){
+  if(!HT.toile) return null;
+  const d=CELL*0.62;
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(d,d),
+    new THREE.MeshBasicMaterial({map:HT.toile,transparent:true,
+      depthWrite:false,side:THREE.DoubleSide,opacity:0.85,fog:true}));
+  return m;
 }
 
 
@@ -466,6 +649,62 @@ function cellContent(r,c){
     finishObj = f;
     grp.add(f);
   }
+  // ── Decor d'Halloween ──────────────────────────────────────────
+  if(HALLO){
+    // Toile d'araignee dans un angle, avec parfois son occupante
+    if(rnd(r,c,2201)<0.14){
+      const t=makeToile();
+      if(t){
+        // on la plaque contre une face qui donne sur un mur voisin
+        const coins=[[-1,-1,0],[1,-1,Math.PI/2],[1,1,Math.PI],[-1,1,-Math.PI/2]];
+        const pick=coins[Math.floor(rnd(r,c,2211)*4)%4];
+        t.position.set(x+pick[0]*CELL*0.30, WALL_H*0.74, z+pick[1]*CELL*0.30);
+        t.rotation.y=pick[2]+Math.PI/4;
+        grp.add(t);
+        if(P.arai && rnd(r,c,2221)<0.45){
+          const a=P.arai.clone();
+          a.position.set(t.position.x, t.position.y-CELL*0.10, t.position.z);
+          a.rotation.y=pick[2];
+          grp.add(a);
+        }
+      }
+    }
+    // Citrouilles posees au sol, dans tous les decors
+    if(P.pump && rnd(r,c,2301)<0.18){
+      const k=P.pump.clone();
+      k.rotation.y=rnd(r,c,2311)*Math.PI*2;
+      k.scale.multiplyScalar(0.85+rnd(r,c,2321)*0.45);
+      k.position.set(x+(rnd(r,c,2331)-.5)*CELL*.42, 0, z+(rnd(r,c,2341)-.5)*CELL*.42);
+      grp.add(k);
+      // lueur chaude : un halo dessine, pas une vraie lumiere
+      // (une source par citrouille ferait s'ecrouler les performances)
+      if(HT.halo){
+        const h=new THREE.Sprite(new THREE.SpriteMaterial({map:HT.halo,
+          transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
+          opacity:0.55,fog:true}));
+        h.scale.set(CELL*0.9,CELL*0.9,1);
+        h.position.set(k.position.x, CELL*0.17, k.position.z);
+        grp.add(h);
+      }
+    }
+    // Epouvantail : rare, et seulement dans le mais et les haies
+    if(P.epou && !ville && rnd(r,c,2401)<0.055){
+      const e=P.epou.clone();
+      e.rotation.y=rnd(r,c,2411)*Math.PI*2;
+      e.position.set(x,0,z);
+      grp.add(e);
+    }
+    // Zombie : en ville, il sort d'une bouche d'egout
+    if(P.zomb && ville && rnd(r,c,2501)<0.07){
+      const zo=P.zomb.clone();
+      zo.rotation.y=rnd(r,c,2511)*Math.PI*2;
+      zo.position.set(x,0,z);
+      grp.add(zo);
+      const eg=makeEgout(CELL*.55);
+      if(eg){eg.position.set(x,0,z);grp.add(eg);}
+    }
+  }
+
   const hb=g.hiddenBonus;
   if(hb && hb.x===c && hb.y===r && P.cof){
     const k=P.cof.clone();k.rotation.y=rnd(r,c,17)*6.28;k.position.set(x,0,z);grp.add(k);
@@ -517,6 +756,40 @@ function spawnCritters(){
   clearCritters();
   const g=G(); if(!g) return;
   const nature=(curTheme!=='briques'), rain=(curWeather==='rain');
+
+  // ── Halloween : chats noirs en ville, fantomes partout, chauves-souris au ciel ──
+  if(HALLO){
+    if(!nature && HT.chat){                       // le chat noir remplace le rat
+      for(let i=0;i<5;i++){
+        const o=new THREE.Sprite(new THREE.SpriteMaterial({map:HT.chat,
+          transparent:true,depthWrite:false}));
+        o.scale.set(0.62,0.62*0.66,1); o.center.set(0.5,0); scene.add(o);
+        critters.push({obj:o,kind:'rat',size:0.62,a:Math.random()*6.28,
+          sp:0.018+Math.random()*0.010,t:Math.random()*100,placed:false});
+      }
+    }
+    if(HT.fantome){                               // fantomes flottants, tous decors
+      for(let i=0;i<4;i++){
+        const o=new THREE.Sprite(new THREE.SpriteMaterial({map:HT.fantome,
+          transparent:true,depthWrite:false,opacity:0.72}));
+        const sz=0.85+Math.random()*0.35; o.scale.set(sz,sz*1.15,1); scene.add(o);
+        critters.push({obj:o,kind:'bfly',spectre:true,size:sz,a:Math.random()*6.28,
+          sp:0.007+Math.random()*0.005,t:Math.random()*100,placed:false,
+          base:1.15+Math.random()*0.5,ph:Math.random()*6.28});
+      }
+    }
+    if(HT.bat){                                   // chauves-souris a la place des oiseaux
+      for(let i=0;i<6;i++){
+        const o=new THREE.Sprite(new THREE.SpriteMaterial({map:HT.bat,
+          transparent:true,depthWrite:false,opacity:.92,fog:false}));
+        o.scale.set(1.3,1.3,1); scene.add(o);
+        critters.push({obj:o,kind:'bird',sz:1.3,r:10+Math.random()*14,
+          a:Math.random()*6.28,sp:0.007+Math.random()*0.006,h:8+Math.random()*7});
+      }
+    }
+    return;                                       // pas de fourmis ni de papillons la nuit
+  }
+
   const kind=nature?'ant':'rat', size=nature?0.26:0.55, n=nature?14:8;
   for(let i=0;i<n;i++){
     let obj;
@@ -558,7 +831,8 @@ function updateCritters(wx,wz){
     if(k.kind==='bird'){
       k.a+=k.sp;
       k.obj.position.set(wx+Math.cos(k.a)*k.r, k.h+Math.sin(k.a*2)*0.7, wz+Math.sin(k.a)*k.r);
-      const f=1+Math.sin(now*0.012+k.a*3)*0.25;k.obj.scale.set(1.6,1.6*f,1);
+      const sz=k.sz||1.6;
+      const f=1+Math.sin(now*0.012+k.a*3)*0.25;k.obj.scale.set(sz,sz*f,1);
       continue;
     }
     if(k.kind==='bfly'){
@@ -573,8 +847,15 @@ function updateCritters(wx,wz){
       const nx=k.obj.position.x+Math.cos(k.a)*k.sp, nz=k.obj.position.z+Math.sin(k.a)*k.sp;
       if(freeAt(nx,nz)){k.obj.position.x=nx;k.obj.position.z=nz;} else k.a+=2.4;
       k.obj.position.y=k.base+Math.sin(now*0.003+k.ph)*0.28;
-      const flap=0.35+Math.abs(Math.sin(now*0.018+k.ph))*0.65;
-      k.obj.scale.set(k.size*flap,k.size,1);
+      if(k.spectre){
+        // flottement doux : la silhouette ondule legerement, sans battement
+        const o=0.58+Math.abs(Math.sin(now*0.0016+k.ph))*0.22;
+        k.obj.material.opacity=o;
+        k.obj.scale.set(k.size,k.size*(1.15+Math.sin(now*0.0022+k.ph)*0.05),1);
+      } else {
+        const flap=0.35+Math.abs(Math.sin(now*0.018+k.ph))*0.65;
+        k.obj.scale.set(k.size*flap,k.size,1);
+      }
       continue;
     }
     if(!k.placed||Math.hypot(k.obj.position.x-wx,k.obj.position.z-wz)>CELL*6){
@@ -600,6 +881,42 @@ function updateCritters(wx,wz){
 function applyWeather(){
   const g=G(); if(!g) return;
   const rain=(curWeather==='rain');
+
+  // ── Nuit d'Halloween : ciel violet, brume epaisse, pleine lune ──
+  if(HALLO){
+    const ciel=H_CIEL;
+    scene.background=new THREE.Color(ciel);
+    const far=Math.min(radius*CELL-CELL*1.15,(g.MAX_DEPTH||20)*CELL);
+    scene.fog=new THREE.Fog(H_BRUME, far*0.30, far*0.92);   // brume plus proche = plus inquietant
+    sun.intensity=0.42; hemi.intensity=0.55;
+    sun.color.setHex(0xbfa8ff);                             // clair de lune bleute
+    hemi.color.setHex(0x8a6fd0);
+    cloudMat.map=CLOUD.sombre; cloudMat.needsUpdate=true;
+    cloudLayer.position.y=19;
+    skyMat.map=SKYL.sombre; skyMat.needsUpdate=true;
+    rainPts.visible=rain;
+    puffs.forEach(q=>{q.obj.material.map=PUFF.sombre;q.obj.material.needsUpdate=true;
+      q.obj.material.opacity=0.55;q.h=10+Math.random()*7;});
+
+    if(!luneObj && HT.lune){
+      luneObj=new THREE.Sprite(new THREE.SpriteMaterial({map:HT.lune,transparent:true,
+        depthWrite:false,fog:false,opacity:0.95}));
+      luneObj.scale.set(34,34,1); luneObj.renderOrder=-20; scene.add(luneObj);
+    }
+    if(!sorciereObj && HT.sorciere){
+      sorciereObj=new THREE.Sprite(new THREE.SpriteMaterial({map:HT.sorciere,transparent:true,
+        depthWrite:false,fog:false,opacity:0.9}));
+      sorciereObj.scale.set(7,7,1); sorciereObj.renderOrder=-19;
+      sorciereObj.userData.t=-6000;   // premier passage apres quelques secondes
+      scene.add(sorciereObj);
+    }
+    return;
+  }
+
+  // ── Reste de l'annee : comportement d'origine ──
+  if(luneObj){scene.remove(luneObj);luneObj=null;}
+  if(sorciereObj){scene.remove(sorciereObj);sorciereObj=null;}
+  sun.color.setHex(0xffffff); hemi.color.setHex(0xffffff);
   const sky=rain?0x8c97a6:0x87CEEB;
   scene.background=new THREE.Color(sky);
   const far=Math.min(radius*CELL-CELL*1.15, (g.MAX_DEPTH||20)*CELL);
@@ -677,6 +994,26 @@ export function render(){
     rainGeo.attributes.position.needsUpdate=true;
     rainPts.position.set(wx,0,wz);
   }
+  // ── Lune fixe dans le ciel et sorciere qui passe de temps en temps ──
+  if(HALLO){
+    if(luneObj){
+      // ancree sur une direction fixe du monde : elle ne suit pas le regard
+      luneObj.position.set(wx+Math.cos(0.9)*95, 48, wz+Math.sin(0.9)*95);
+    }
+    if(sorciereObj){
+      const cycle=26000;                      // un passage toutes les ~26 s
+      const t=(now-sorciereObj.userData.t)%cycle;
+      if(t<5200){
+        const k=t/5200;                       // 0 -> 1 : traversee du ciel
+        const ang=0.9+(k-0.5)*1.25;           // elle passe devant la lune
+        const d=92;
+        sorciereObj.position.set(wx+Math.cos(ang)*d, 46+Math.sin(k*Math.PI)*5, wz+Math.sin(ang)*d);
+        sorciereObj.material.opacity=0.9*Math.sin(k*Math.PI);
+        sorciereObj.visible=true;
+      } else sorciereObj.visible=false;
+    }
+  }
+
   updateCritters(wx,wz);
   aimFinish(wx,wz);
 
@@ -716,6 +1053,11 @@ export async function init(canvas){
   SKYL.clair=skylineTex(false);SKYL.sombre=skylineTex(true);
   FOOT=footTex();HANDS.push(handTex(0),handTex(1),handTex(2));
   CT.ant=critterTex('ant');CT.rat=critterTex('rat');CT.bird=critterTex('bird');
+  if(HALLO){
+    HT.lune=luneTex(); HT.bat=chauveSourisTex(); HT.fantome=fantomeTex();
+    HT.chat=chatNoirTex(); HT.toile=toileTex(); HT.sorciere=sorciereTex();
+    HT.halo=haloTex();
+  }
   BFLY.push(butterflyTex('#f5a623','#e8741e'),butterflyTex('#6ec6f0','#3f8fd0'),
             butterflyTex('#f2e06a','#e2b33c'));
 
@@ -757,6 +1099,10 @@ export async function init(canvas){
   const files={mur_tag:'mur_tag.glb',mur_vide:'mur_vide.glb',buisson:'buisson.glb',
     mais:'mais.glb',finish:'finish.glb',flaque:'flaque.glb',coffre:'coffre.glb',
     cailloux:'cailloux.glb',spray:'spray.glb'};
+  // Modeles d'Halloween : telecharges uniquement pendant la periode,
+  // le reste de l'annee le jeu ne les demande meme pas.
+  if(HALLO) Object.assign(files,{citrouille:'citrouille.glb',epouvantail:'epouvantail.glb',
+    zombie:'zombie.glb',araignee:'araignee.glb'});
   await Promise.all(Object.entries(files).map(([k,f])=>new Promise(res=>{
     loader.load(BASE+f, g=>{RAW[k]=g.scene;res();}, undefined, e=>{console.warn('3D:',f,e);res();});
   })));
