@@ -381,6 +381,7 @@ function butterflyTex(c1,c2){
 const GT={}, CLOUD={}, PUFF={}, SKYL={}, CT={}, BFLY=[];
 const HT={};            // textures Halloween
 let luneObj=null, sorciereObj=null;
+const facers=[];        // decors d'Halloween qui se tournent vers le joueur
 
 
 // ── Effets de bonus : empreintes du fil d'Ariane, main à la craie ──
@@ -651,30 +652,48 @@ function cellContent(r,c){
   }
   // ── Decor d'Halloween ──────────────────────────────────────────
   if(HALLO){
-    // Toile d'araignee dans un angle, avec parfois son occupante
-    if(rnd(r,c,2201)<0.14){
-      const t=makeToile();
-      if(t){
-        // on la plaque contre une face qui donne sur un mur voisin
-        const coins=[[-1,-1,0],[1,-1,Math.PI/2],[1,1,Math.PI],[-1,1,-Math.PI/2]];
-        const pick=coins[Math.floor(rnd(r,c,2211)*4)%4];
-        t.position.set(x+pick[0]*CELL*0.30, WALL_H*0.74, z+pick[1]*CELL*0.30);
-        t.rotation.y=pick[2]+Math.PI/4;
-        grp.add(t);
-        if(P.arai && rnd(r,c,2221)<0.45){
-          const a=P.arai.clone();
-          a.position.set(t.position.x, t.position.y-CELL*0.10, t.position.z);
-          a.rotation.y=pick[2];
-          grp.add(a);
+    // Toile d'araignee : TOUJOURS plaquee contre un mur existant, jamais en l'air
+    if(rnd(r,c,2201)<0.16){
+      // on ne retient que les cotes ou il y a vraiment un mur
+      const cotes=[];
+      if(isWall(r-1,c)) cotes.push({dr:-1,dc:0,ry:0});          // mur au nord
+      if(isWall(r+1,c)) cotes.push({dr:1,dc:0,ry:Math.PI});     // mur au sud
+      if(isWall(r,c-1)) cotes.push({dr:0,dc:-1,ry:Math.PI/2});  // mur a l'ouest
+      if(isWall(r,c+1)) cotes.push({dr:0,dc:1,ry:-Math.PI/2});  // mur a l'est
+      if(cotes.length){
+        const f=cotes[Math.floor(rnd(r,c,2211)*cotes.length)%cotes.length];
+        const t=makeToile();
+        if(t){
+          const TW=CELL*0.46;                       // largeur de la toile
+          t.scale.set(TW/(CELL*0.62), TW/(CELL*0.62), 1);
+          // collee a la face interieure du mur, legerement en retrait
+          const d=CELL/2 - THICK*0.55;
+          // hauteur : le haut de la toile reste SOUS le sommet du mur
+          const hy=WALL_H - TW*0.60;
+          t.position.set(x + f.dc*d, hy, z + f.dr*d);
+          t.rotation.y=f.ry;
+          // decalage lateral pour qu'elle soit dans un coin, pas au milieu
+          const lat=(rnd(r,c,2231)<0.5?-1:1)*CELL*0.22;
+          if(f.dc===0) t.position.x+=lat; else t.position.z+=lat;
+          grp.add(t);
+          if(P.arai && rnd(r,c,2221)<0.5){
+            const a=P.arai.clone();
+            a.position.set(t.position.x - f.dc*THICK*0.4,
+                           t.position.y - TW*0.12,
+                           t.position.z - f.dr*THICK*0.4);
+            a.rotation.y=f.ry;
+            grp.add(a);
+          }
         }
       }
     }
     // Citrouilles posees au sol, dans tous les decors
     if(P.pump && rnd(r,c,2301)<0.18){
       const k=P.pump.clone();
-      k.rotation.y=rnd(r,c,2311)*Math.PI*2;
       k.scale.multiplyScalar(0.85+rnd(r,c,2321)*0.45);
+      k.userData.faceJoueur=true;
       k.position.set(x+(rnd(r,c,2331)-.5)*CELL*.42, 0, z+(rnd(r,c,2341)-.5)*CELL*.42);
+      k.userData.gx=k.position.x; k.userData.gz=k.position.z;
       grp.add(k);
       // lueur chaude : un halo dessine, pas une vraie lumiere
       // (une source par citrouille ferait s'ecrouler les performances)
@@ -690,15 +709,17 @@ function cellContent(r,c){
     // Epouvantail : rare, et seulement dans le mais et les haies
     if(P.epou && !ville && rnd(r,c,2401)<0.055){
       const e=P.epou.clone();
-      e.rotation.y=rnd(r,c,2411)*Math.PI*2;
+      e.userData.faceJoueur=true;
       e.position.set(x,0,z);
+      e.userData.gx=x; e.userData.gz=z;
       grp.add(e);
     }
     // Zombie : en ville, il sort d'une bouche d'egout
     if(P.zomb && ville && rnd(r,c,2501)<0.07){
       const zo=P.zomb.clone();
-      zo.rotation.y=rnd(r,c,2511)*Math.PI*2;
+      zo.userData.faceJoueur=true;
       zo.position.set(x,0,z);
+      zo.userData.gx=x; zo.userData.gz=z;
       grp.add(zo);
       const eg=makeEgout(CELL*.55);
       if(eg){eg.position.set(x,0,z);grp.add(eg);}
@@ -736,6 +757,15 @@ function cellContent(r,c){
   return grp.children.length?grp:null;
 }
 
+// Recense les decors a orienter. Appele seulement quand la zone visible change.
+function recenserFacers(){
+  facers.length=0;
+  for(const [,groupe] of live){
+    if(!groupe) continue;
+    groupe.traverse(o=>{ if(o.userData && o.userData.faceJoueur) facers.push(o); });
+  }
+}
+
 function updateZone(){
   const g=G(); if(!g) return;
   const pc=Math.floor(g.px), pr=Math.floor(g.py);
@@ -746,8 +776,10 @@ function updateZone(){
     if(!live.has(k)){ const o=cellContent(r,c); if(o){scene.add(o);live.set(k,o);} else live.set(k,null); }
   }
   for(const [k,o] of live){ if(!need.has(k)){ if(o) scene.remove(o); live.delete(k); } }
+  if(HALLO) recenserFacers();
 }
 function clearWorld(){ for(const [,o] of live) if(o) scene.remove(o); live.clear();
+  facers.length=0;
   finishObj = null; finishLocked = false; }
 
 // ── Animaux ────────────────────────────────────────────────────────
@@ -996,6 +1028,11 @@ export function render(){
   }
   // ── Lune fixe dans le ciel et sorciere qui passe de temps en temps ──
   if(HALLO){
+    // Les citrouilles, epouvantails et zombies se presentent toujours de face :
+    // on arrivait souvent sur eux de dos.
+    for(const o of facers){
+      o.rotation.y = Math.atan2(wx - o.userData.gx, wz - o.userData.gz);
+    }
     if(luneObj){
       // ancree sur une direction fixe du monde : elle ne suit pas le regard
       luneObj.position.set(wx+Math.cos(0.9)*95, 48, wz+Math.sin(0.9)*95);
