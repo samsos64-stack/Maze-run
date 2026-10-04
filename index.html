@@ -1659,9 +1659,16 @@ window.addEventListener('load', () => {
   setInterval(() => {
     try {
       const b = document.getElementById('itemBar');
-      if (b && !running && b.style.display !== 'none') b.style.display = 'none';
+      if (!b) return;
+      const ov = document.getElementById('overlay');
+      // Un ecran est affiche par-dessus le jeu (menu, carte, boutique, coffre,
+      // fin de niveau) OU aucune partie ne tourne -> la barre se range.
+      const ecranOuvert = ov && getComputedStyle(ov).display !== 'none';
+      if ((ecranOuvert || !running) && b.style.display !== 'none') {
+        b.style.display = 'none';
+      }
     } catch (e) {}
-  }, 700);
+  }, 400);
 
   // le composant de facturation s'annonce apres le chargement : plusieurs essais
   let essais = 0;
@@ -6371,7 +6378,8 @@ function refreshItemBar() {
   // Hors partie (menu, carte, boutique, coffre...), la barre n'a rien a faire
   // a l'ecran : elle recouvrait les boutons du menu principal.
   const ov = document.getElementById('overlay');
-  if (!running || (ov && ov.style.display !== 'none' && ov.style.display !== '')) {
+  const ecranOuvert = ov && getComputedStyle(ov).display !== 'none';
+  if (!running || ecranOuvert) {
     bar.style.display = 'none';
     return;
   }
