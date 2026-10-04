@@ -18,7 +18,7 @@ const SNUG   = { 'briques':1.04, 'buissons':1.22, 'maïs':1.14 };
 const G = () => window.GAME3D;
 
 // ══════════════════════════════════════════════════════════════════
-//  THEME HALLOWEEN — s'active tout seul du 15 au 31 octobre.
+//  THEME HALLOWEEN — s'active tout seul du 1er octobre au 10 novembre.
 //  Pour tester hors periode : ajouter ?halloween=1 a l'adresse.
 //  (ou ?halloween=0 pour le desactiver de force)
 // ══════════════════════════════════════════════════════════════════
@@ -28,8 +28,10 @@ const HALLO = (() => {
     if (q === '1') return true;
     if (q === '0') return false;
   } catch(e) {}
-  const d = new Date();
-  return d.getMonth() === 9 && d.getDate() >= 15 && d.getDate() <= 31;  // octobre
+  const d = new Date(), m = d.getMonth(), j = d.getDate();
+  if (m === 9) return true;              // tout octobre
+  if (m === 10 && j <= 10) return true;  // jusqu'au 10 novembre
+  return false;
 })();
 
 // Palette de la nuit d'Halloween
